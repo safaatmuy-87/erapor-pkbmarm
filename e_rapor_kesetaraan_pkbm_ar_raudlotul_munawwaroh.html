@@ -1,0 +1,2997 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>e-Rapor Pendidikan Kesetaraan - PKBM AR RAUDLOTUL MUNAWWAROH</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Google Font Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .rapor-times-font, .rapor-times-font * {
+      font-family: 'Times New Roman', Times, serif !important;
+      font-variant-numeric: lining-nums;
+    }
+    @media print {
+      body {
+        background: #ffffff !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .print-sheet-wrapper {
+        box-shadow: none !important;
+        border: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+      .page-break {
+        page-break-after: always;
+        break-after: page;
+      }
+      .page-break-before {
+        page-break-before: always;
+        break-before: page;
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+        border: none !important;
+      }
+    }
+  </style>
+  <style id="dynamic-print-page-style">
+    @page {
+      size: 215mm 330mm;
+      margin: 12mm 14mm 12mm 14mm;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased">
+  <!-- ROOT CONTAINER -->
+  <div id="app"></div>
+
+  <!-- MODAL GANTI PASSWORD -->
+  <div id="password-modal" class="no-print hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center gap-2 border-b pb-3">
+        <i data-lucide="key-round" class="w-5 h-5 text-blue-600"></i>
+        <h3 class="font-bold text-slate-800 text-base">Ganti Kata Sandi Akun</h3>
+      </div>
+      <div id="pass-modal-error" class="hidden p-2.5 text-xs bg-red-50 border border-red-200 text-red-700 rounded-lg font-medium"></div>
+      <form onsubmit="handleSaveMyPassword(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Kata Sandi Lama</label>
+          <input type="password" id="old-my-pass" required class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="Masukkan kata sandi saat ini" />
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Kata Sandi Baru</label>
+          <input type="password" id="new-my-pass" required class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="Minimal 4 karakter" />
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Konfirmasi Kata Sandi Baru</label>
+          <input type="password" id="confirm-my-pass" required class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="Ulangi kata sandi baru" />
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closePasswordModal()" class="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-bold hover:bg-slate-100">Batal</button>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold">Simpan Password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toast-box" class="no-print hidden fixed bottom-5 right-5 z-50 bg-emerald-700 text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 text-xs font-semibold">
+    <i data-lucide="check-circle-2" class="w-4 h-4 shrink-0"></i>
+    <span id="toast-text"></span>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    window.cloudSync = {
+      enabled: false,
+      status: "OFFLINE",
+      lastUpdatedBy: "",
+      init: async function () {
+        try {
+          if (typeof __firebase_config === "undefined" || !__firebase_config) return;
+          const firebaseConfig = JSON.parse(__firebase_config);
+          const appId = typeof __app_id !== "undefined" ? __app_id : "erapor-pkbm-arm";
+          const fbApp = initializeApp(firebaseConfig);
+          const auth = getAuth(fbApp);
+          const db = getFirestore(fbApp);
+
+          if (typeof __initial_auth_token !== "undefined" && __initial_auth_token) {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } else {
+            await signInAnonymously(auth);
+          }
+
+          const user = auth.currentUser;
+          if (!user) return;
+
+          const stateDocRef = doc(db, "artifacts", appId, "public", "data", "erapor_live_state", "main");
+          this.enabled = true;
+          this.status = "LIVE";
+
+          this.push = async function (payloadObj, actorName) {
+            if (!auth.currentUser) return;
+            try {
+              await setDoc(stateDocRef, {
+                payloadJson: JSON.stringify(payloadObj),
+                updatedAt: Date.now(),
+                updatedBy: actorName || "Pengguna",
+              });
+            } catch (err) {
+              console.error("Cloud sync write error:", err);
+            }
+          };
+
+          onSnapshot(
+            stateDocRef,
+            (snap) => {
+              if (!snap.exists()) {
+                if (typeof window.getAppDataSnapshot === "function") {
+                  this.push(window.getAppDataSnapshot(), "Sistem Awal");
+                }
+                return;
+              }
+              const data = snap.data();
+              if (data && data.payloadJson && typeof window.applyRemoteAppState === "function") {
+                window.applyRemoteAppState(data.payloadJson, data.updatedAt, data.updatedBy);
+              }
+            },
+            (err) => {
+              console.error("Cloud sync snapshot error:", err);
+              this.status = "LOCAL";
+              if (typeof window.renderApp === "function") window.renderApp();
+            }
+          );
+
+          if (typeof window.renderApp === "function") window.renderApp();
+        } catch (e) {
+          console.warn("Running in local live-sync mode:", e);
+        }
+      },
+    };
+
+    window.addEventListener("DOMContentLoaded", () => {
+      window.cloudSync.init();
+    });
+  </script>
+
+  <script>
+    function refreshIcons() {
+      try {
+        if (window.lucide && typeof window.lucide.createIcons === "function") {
+          window.lucide.createIcons();
+        }
+      } catch (e) {}
+    }
+
+    // =========================================================================
+    // 1. UTILITAS KALKULASI KKM, PREDIKAT, & GENERATOR OTOMATIS
+    // =========================================================================
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return "";
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function hitungPredikatK13(nilai, kkm) {
+      const n = Number(nilai) || 0;
+      const k = Number(kkm) || 75;
+      const interval = (100 - k) / 3;
+      const batasB = Math.round(k + interval);
+      const batasA = Math.round(k + 2 * interval);
+      if (n >= batasA) return "A";
+      if (n >= batasB) return "B";
+      if (n >= k) return "C";
+      return "D";
+    }
+
+    function getIntervalInfoK13(kkm) {
+      const k = Number(kkm) || 75;
+      const interval = Math.round((100 - k) / 3);
+      return {
+        D: `< ${k}`,
+        C: `${k} - ${k + interval - 1}`,
+        B: `${k + interval} - ${k + 2 * interval - 1}`,
+        A: `${k + 2 * interval} - 100`,
+      };
+    }
+
+    function generateDeskripsiMerdeka(daftarTp) {
+      if (!daftarTp || daftarTp.length === 0) return "";
+      const sorted = [...daftarTp].sort((a, b) => Number(b.skor) - Number(a.skor));
+      const tertinggi = sorted[0];
+      const terendah = sorted[sorted.length - 1];
+
+      const cleanTinggi = (tertinggi.deskripsi || "").replace(/\.$/, "");
+      const cleanRendah = (terendah.deskripsi || "").replace(/\.$/, "");
+
+      const kalimatTinggi = `Mencapai Kompetensi dengan sangat baik dalam hal ${
+        cleanTinggi.charAt(0).toLowerCase() + cleanTinggi.slice(1)
+      }.`;
+
+      if (sorted.length === 1 || cleanTinggi === cleanRendah) {
+        return kalimatTinggi;
+      }
+
+      const kalimatRendah = `Perlu peningkatan dalam hal ${
+        cleanRendah.charAt(0).toLowerCase() + cleanRendah.slice(1)
+      }.`;
+
+      return `${kalimatTinggi} ${kalimatRendah}`;
+    }
+
+    function generateDeskripsiK13(daftarKd, kkm) {
+      if (!daftarKd || daftarKd.length === 0) return "";
+      const sorted = [...daftarKd].sort((a, b) => Number(b.skor) - Number(a.skor));
+      const tertinggi = sorted[0];
+      const terendah = sorted[sorted.length - 1];
+
+      const predikat = hitungPredikatK13(tertinggi.skor, kkm);
+      const kualitas = predikat === "A" ? "sangat baik" : predikat === "B" ? "baik" : "cukup baik";
+      const cleanTinggi = (tertinggi.deskripsi || "").replace(/\.$/, "");
+      const cleanRendah = (terendah.deskripsi || "").replace(/\.$/, "");
+
+      const kalimat1 = `Memiliki kemampuan ${kualitas} dalam hal ${
+        cleanTinggi.charAt(0).toLowerCase() + cleanTinggi.slice(1)
+      }.`;
+
+      if (sorted.length === 1 || cleanTinggi === cleanRendah) {
+        return kalimat1;
+      }
+
+      const kalimat2 =
+        Number(terendah.skor) < Number(kkm)
+          ? `Perlu bimbingan dalam hal ${cleanRendah.charAt(0).toLowerCase() + cleanRendah.slice(1)}.`
+          : `Perlu peningkatan dalam hal ${cleanRendah.charAt(0).toLowerCase() + cleanRendah.slice(1)}.`;
+
+      return `${kalimat1} ${kalimat2}`;
+    }
+
+    function generateTPOtomatis(mapelNama, tingkatKelas, semester) {
+      const semText = semester.includes("1") ? "Semester Ganjil" : "Semester Genap";
+      const jenjangText =
+        tingkatKelas <= 6
+          ? `Tingkat Dasar Kelas ${tingkatKelas}`
+          : tingkatKelas <= 9
+          ? `Tingkat Menengah Pertama Kelas ${tingkatKelas}`
+          : `Tingkat Menengah Atas Kelas ${tingkatKelas}`;
+
+      const bankTp = {
+        "Pendidikan Agama Islam dan Budi Pekerti": [
+          `Memahami dan meneladani nilai-nilai akhlak mulia serta pengendalian diri dalam kehidupan sehari-hari (${jenjangText} - ${semText})`,
+          `Menganalisis kandungan ayat suci Al-Qur'an dan hadis tentang tanggung jawab sosial serta menerapkannya di masyarakat`,
+          `Mempraktikkan tata cara ibadah dan muamalah sesuai ketentuan syariat Islam secara mandiri dan tertib`,
+        ],
+        "Pendidikan Pancasila": [
+          `Menganalisis makna kebhinekaan dan menerapkan nilai-nilai Pancasila dalam kehidupan bermasyarakat (${jenjangText} - ${semText})`,
+          `Merancang solusi atas permasalahan hak dan kewajiban warga negara berdasarkan norma konstitusi`,
+          `Menunjukkan sikap gotong royong dan musyawarah mufakat dalam lingkungan satuan pendidikan kesetaraan`,
+        ],
+        "Bahasa Indonesia": [
+          `Mengevaluasi informasi, gagasan, dan pandangan dalam teks laporan observasi maupun teks eksposisi (${jenjangText} - ${semText})`,
+          `Mengonstruksi teks negosiasi dan biografi tokoh secara lisan maupun tulis dengan kaidah kebahasaan yang tepat`,
+          `Menyampaikan gagasan kreatif dan pesan moral melalui karya sastra serta presentasi efektif`,
+        ],
+        Matematika: [
+          `Mempresentasikan dan menginterpretasikan data statistik kontekstual dalam kehidupan sehari-hari (${jenjangText} - ${semText})`,
+          `Menyelesaikan masalah kontekstual yang berkaitan dengan persamaan, pertidaksamaan, dan fungsi aljabar`,
+          `Menerapkan konsep aritmetika sosial dan pengukuran geometri dalam pemecahan masalah praktis`,
+        ],
+      };
+
+      const selected = bankTp[mapelNama] || [
+        `Memahami konsep dasar dan prinsip utama mata pelajaran ${mapelNama} pada ${jenjangText} (${semText})`,
+        `Menerapkan keterampilan pemecahan masalah kontekstual pada mata pelajaran ${mapelNama} secara mandiri`,
+        `Mengevaluasi dan menyajikan hasil karya pembelajaran ${mapelNama} dengan penuh tanggung jawab`,
+      ];
+
+      return selected.map((desc, i) => ({
+        id: `tp_gen_${Date.now()}_${i}`,
+        kode: `TP.${i + 1}`,
+        deskripsi: desc,
+        isActive: true,
+      }));
+    }
+
+    function generateKDOtomatis(mapelNama, tingkatKelas, semester) {
+      const semText = semester.includes("1") ? "Semester 1" : "Semester 2";
+      return [
+        {
+          id: `kd_gen_p1_${Date.now()}`,
+          aspek: "PENGETAHUAN",
+          kode: `3.${tingkatKelas}.1`,
+          deskripsi: `Menganalisis konsep esensial dan prinsip dasar ${mapelNama} Kelas ${tingkatKelas} (${semText})`,
+        },
+        {
+          id: `kd_gen_p2_${Date.now()}`,
+          aspek: "PENGETAHUAN",
+          kode: `3.${tingkatKelas}.2`,
+          deskripsi: `Mengevaluasi penerapan materi ${mapelNama} dalam pemecahan masalah kehidupan sehari-hari`,
+        },
+        {
+          id: `kd_gen_k1_${Date.now()}`,
+          aspek: "KETERAMPILAN",
+          kode: `4.${tingkatKelas}.1`,
+          deskripsi: `Mempraktikkan dan menyajikan hasil kerja proyek terapan pada mata pelajaran ${mapelNama} (${semText})`,
+        },
+      ];
+    }
+
+    function generateAISikap(jenis, predikat, tingkatKelas) {
+      const faseLabel =
+        tingkatKelas <= 6 ? "tingkat dasar" : tingkatKelas <= 9 ? "tingkat remaja" : "tingkat dewasa muda";
+      if (jenis === "SPIRITUAL") {
+        if (predikat === "Sangat Baik") {
+          return `Menunjukkan ketaatan beribadah yang sangat baik pada ${faseLabel}, selalu berdoa sebelum dan sesudah belajar, bersyukur, serta menjaga toleransi antarumat beragama.`;
+        }
+        return `Menunjukkan sikap spiritual yang baik, rutin menjalankan ibadah wajib, berdoa sebelum memulai kegiatan belajar, dan menghormati sesama.`;
+      } else {
+        if (predikat === "Sangat Baik") {
+          return `Memiliki sikap jujur, disiplin tinggi, santun kepada tutor, peduli lingkungan, serta proaktif bekerja sama dalam kegiatan pemberdayaan masyarakat.`;
+        }
+        return `Memiliki sikap sosial yang baik, bertanggung jawab dalam menyelesaikan tugas mandiri, sopan santun, dan mampu beradaptasi di lingkungan belajar.`;
+      }
+    }
+
+    function generateAICatatanWali(siswa, rombel) {
+      const kedisiplinan =
+        (siswa.alpa || 0) === 0
+          ? "memiliki tingkat kedisiplinan kehadiran yang sangat baik tanpa catatan alpa"
+          : `perlu meningkatkan kedisiplinan kehadiran (${siswa.alpa} hari tanpa keterangan)`;
+
+      if (rombel.program === "Paket A") {
+        return `Ananda ${siswa.nama} menunjukkan perkembangan literasi, numerasi, dan kemandirian yang positif serta ${kedisiplinan}. Terus semangat berlatih membaca dan berkarya.`;
+      }
+      if (rombel.program === "Paket B") {
+        return `Ananda ${siswa.nama} ${kedisiplinan} serta aktif dalam kegiatan pembelajaran dan keterampilan. Pertahankan semangat belajar mandiri agar meraih hasil lebih optimal pada semester mendatang.`;
+      }
+      return `Warga belajar atas nama ${siswa.nama} ${kedisiplinan}. Kemampuan kemandirian dan keterampilan fungsional berkembang dengan baik. Terus tingkatkan kompetensi sebagai bekal di masyarakat dan dunia kerja.`;
+    }
+
+    // =========================================================================
+    // 2. DATA SEEDER AWAL PKBM AR RAUDLOTUL MUNAWWAROH PLUMPANG
+    // =========================================================================
+
+    const STORAGE_KEY = "erapor_pkbm_arm_html_v1";
+
+    const DEFAULT_STATE = {
+      profil: {
+        namaSatuan: "PKBM AR RAUDLOTUL MUNAWWAROH",
+        npsn: "P9984512",
+        alamat: "Jl. Raya Plumpang - Rengel, Dsn. Krajan",
+        desaKelurahan: "Plumpang",
+        kecamatan: "Plumpang",
+        kabupaten: "Tuban",
+        provinsi: "Jawa Timur",
+        kodePos: "62382",
+        tahunPelajaran: "2025/2026",
+        semester: "2 (Genap)",
+        tanggalRapor: "Plumpang, 20 Juni 2026",
+        namaKepala: "KH. Ahmad Munawwar, S.Pd.I",
+        nipKepala: "-",
+        logoPkbmBase64: "",
+      },
+      printConfig: {
+        paperSize: "F4",
+        marginTop: 12,
+        marginBottom: 12,
+        marginLeft: 14,
+        marginRight: 14,
+        scalePercent: 100,
+        signatureLayout: "3_KOLOM",
+      },
+      users: [
+        { id: "u_admin", username: "admin", password: "123456", nama: "Operator PKBM Ar Raudlotul Munawwaroh", role: "ADMIN", nuptk: "-" },
+        { id: "t1", username: "tutor.bhs", password: "123456", nama: "Siti Nurhalimah, S.Pd.", role: "WALI_KELAS", nuptk: "4532768669230012" },
+        { id: "t2", username: "tutor.keterampilan", password: "123456", nama: "M. Ridwan Kamil, S.Kom.", role: "WALI_KELAS", nuptk: "7841770671130045" },
+        { id: "t3", username: "tutor.ips", password: "123456", nama: "Dra. Hj. Musyarofah", role: "WALI_KELAS", nuptk: "196805121994032004" },
+        { id: "t4", username: "tutor.pai", password: "123456", nama: "Ustadz Abdul Rohman, S.Ag.", role: "TUTOR", nuptk: "6451765666130021" },
+      ],
+      rombels: [
+        { id: "r1", namaRombel: "Paket C - Fase E (Kelas 10 Merdeka)", program: "Paket C", kurikulum: "MERDEKA", tingkatKelas: 10, faseTingkatan: "Fase E", peminatan: "-", waliKelasId: "t1" },
+        { id: "r2", namaRombel: "Paket C - Tingkatan 6 (Kelas 12 IIS K-13)", program: "Paket C", kurikulum: "K13", tingkatKelas: 12, faseTingkatan: "Tingkatan 6", peminatan: "IIS", waliKelasId: "t2" },
+        { id: "r3", namaRombel: "Paket B - Fase D (Kelas 8 Merdeka)", program: "Paket B", kurikulum: "MERDEKA", tingkatKelas: 8, faseTingkatan: "Fase D", peminatan: "-", waliKelasId: "t3" },
+        { id: "r4", namaRombel: "Paket A - Tingkatan 2 (Kelas 5 K-13)", program: "Paket A", kurikulum: "K13", tingkatKelas: 5, faseTingkatan: "Tingkatan 2", peminatan: "-", waliKelasId: "t1" },
+      ],
+      mapels: [
+        {
+          id: "m1", kode: "PAI", nama: "Pendidikan Agama Islam dan Budi Pekerti", kelompok: "UMUM", skk: 2, kkm: 75, tutorId: "t4", isActive: true,
+          tps: [
+            { id: "tp1", kode: "TP.1", deskripsi: "Memahami makna iman kepada kitab-kitab Allah serta menerapkannya dalam perilaku jujur sehari-hari", isActive: true },
+            { id: "tp2", kode: "TP.2", deskripsi: "Menganalisis ketentuan pelaksanaan penyelenggaraan jenazah dan khutbah sesuai syariat Islam", isActive: true },
+          ],
+          kds: [
+            { id: "kd1", aspek: "PENGETAHUAN", kode: "3.1", deskripsi: "Menganalisis makna iman kepada hari akhir dan perilaku mawas diri" },
+            { id: "kd2", aspek: "KETERAMPILAN", kode: "4.1", deskripsi: "Menyajikan kaitan antara beriman kepada hari akhir dengan perilaku jujur dan bertanggung jawab" },
+          ],
+        },
+        {
+          id: "m2", kode: "PPKN", nama: "Pendidikan Pancasila", kelompok: "UMUM", skk: 2, kkm: 75, tutorId: "t3", isActive: true,
+          tps: [
+            { id: "tp3", kode: "TP.1", deskripsi: "Menuliskan dan menjelaskan asal-usul serta makna Bhinneka Tunggal Ika dalam keberagaman masyarakat", isActive: true },
+            { id: "tp4", kode: "TP.2", deskripsi: "Merancang perilaku sesuai nilai-nilai Pancasila dalam kehidupan bermasyarakat dan bernegara", isActive: true },
+          ],
+          kds: [
+            { id: "kd3", aspek: "PENGETAHUAN", kode: "3.2", deskripsi: "Mengevaluasi praktik perlindungan dan penegakan hukum untuk menjamin keadilan" },
+            { id: "kd4", aspek: "KETERAMPILAN", kode: "4.2", deskripsi: "Mendemonstrasikan hasil evaluasi praktik perlindungan dan penegakan hukum" },
+          ],
+        },
+        {
+          id: "m3", kode: "BIND", nama: "Bahasa Indonesia", kelompok: "UMUM", skk: 3, kkm: 75, tutorId: "t1", isActive: true,
+          tps: [
+            { id: "tp5", kode: "TP.1", deskripsi: "Mengevaluasi informasi dan menyampaikan gagasan melalui teks laporan hasil observasi dan negosiasi", isActive: true },
+            { id: "tp6", kode: "TP.2", deskripsi: "Menganalisis struktur, kebahasaan, serta pesan moral dalam teks biografi dan karya sastra puisi", isActive: true },
+          ],
+          kds: [
+            { id: "kd5", aspek: "PENGETAHUAN", kode: "3.1", deskripsi: "Mengidentifikasi isi dan sistematika surat lamaran pekerjaan yang dibaca" },
+            { id: "kd6", aspek: "KETERAMPILAN", kode: "4.1", deskripsi: "Menyajikan simpulan sistematika dan unsur-unsur isi surat lamaran pekerjaan" },
+          ],
+        },
+        {
+          id: "m4", kode: "MTK", nama: "Matematika", kelompok: "UMUM", skk: 3, kkm: 75, tutorId: "t2", isActive: true,
+          tps: [
+            { id: "tp7", kode: "TP.1", deskripsi: "Mempresentasikan dan menginterpretasikan data statistik dengan menentukan jangkauan kuartil", isActive: true },
+            { id: "tp8", kode: "TP.2", deskripsi: "Menyelesaikan masalah kontekstual yang berkaitan dengan sistem persamaan dan pertidaksamaan linear", isActive: true },
+          ],
+          kds: [
+            { id: "kd7", aspek: "PENGETAHUAN", kode: "3.2", deskripsi: "Menentukan dan menganalisis ukuran pemusatan dan penyebaran data berkelompok" },
+            { id: "kd8", aspek: "KETERAMPILAN", kode: "4.2", deskripsi: "Menyelesaikan masalah yang berkaitan dengan penyajian data hasil pengukuran" },
+          ],
+        },
+        {
+          id: "m5", kode: "PMB", nama: "Pemberdayaan (Kemandirian & Kepemimpinan)", kelompok: "PEMBERDAYAAN", skk: 2, kkm: 78, tutorId: "t3", isActive: true,
+          tps: [
+            { id: "tp9", kode: "TP.1", deskripsi: "Menunjukkan kemampuan komunikasi efektif, kerja sama tim, dan kepemimpinan dalam kegiatan sosial", isActive: true },
+            { id: "tp10", kode: "TP.2", deskripsi: "Merancang inisiatif pemecahan masalah berbasis potensi lokal di lingkungan masyarakat Plumpang", isActive: true },
+          ],
+          kds: [
+            { id: "kd9", aspek: "PENGETAHUAN", kode: "3.1", deskripsi: "Memahami konsep pemberdayaan diri dan partisipasi aktif dalam organisasi masyarakat" },
+            { id: "kd10", aspek: "KETERAMPILAN", kode: "4.1", deskripsi: "Mempraktikkan kepemimpinan dan manajemen kegiatan pemberdayaan masyarakat" },
+          ],
+        },
+        {
+          id: "m6", kode: "KTR", nama: "Keterampilan Fungsional (Desain Grafis & TIK)", kelompok: "KETERAMPILAN", skk: 4, kkm: 78, tutorId: "t2", isActive: true,
+          tps: [
+            { id: "tp11", kode: "TP.1", deskripsi: "Mengoperasikan perangkat lunak perkantoran dan desain grafis untuk kebutuhan promosi usaha", isActive: true },
+            { id: "tp12", kode: "TP.2", deskripsi: "Memproduksi dan memasarkan produk kreatif digital secara mandiri dengan sikap profesional", isActive: true },
+          ],
+          kds: [
+            { id: "kd11", aspek: "PENGETAHUAN", kode: "3.1", deskripsi: "Menerapkan prinsip tata letak, tipografi, dan komposisi warna dalam desain grafis" },
+            { id: "kd12", aspek: "KETERAMPILAN", kode: "4.1", deskripsi: "Membuat karya desain publikasi dan administrasi digital siap cetak" },
+          ],
+        },
+      ],
+      siswas: [
+        {
+          id: "s1", nis: "20251001", nisn: "0084512390", password: "123456", nama: "Ahmad Zainul Abidin", jk: "Laki-laki",
+          ttl: "Tuban, 14 Mei 2008", agama: "Islam", statusKeluarga: "Anak Kandung", anakKe: "1",
+          alamat: "Dsn. Krajan, Ds. Plumpang, Kec. Plumpang, Tuban", telepon: "085732110988",
+          sekolahAsal: "SMPN 1 Plumpang", diterimaKelas: "Fase E (Kelas 10)", diterimaTanggal: "14 Juli 2025",
+          namaAyah: "Bpk. H. Sulaiman", namaIbu: "Ibu Hj. Siti Fatimah", alamatOrtu: "Dsn. Krajan, Ds. Plumpang, Kec. Plumpang, Tuban",
+          pekerjaanAyah: "Petani", pekerjaanIbu: "Ibu Rumah Tangga", namaWali: "-", pekerjaanWali: "-",
+          rombelId: "r1", isActive: true, sakit: 1, izin: 0, alpa: 0,
+          catatanWali: "Ananda menunjukkan semangat belajar mandiri yang sangat baik serta aktif dalam praktik keterampilan desain grafis. Pertahankan kedisiplinan dan tingkatkan keaktifan diskusi kelompok.",
+          keputusan: "Naik ke Fase F (Kelas XI)",
+          ekskul: [
+            { kegiatan: "Pramuka", predikat: "Sangat Baik", keterangan: "Aktif dalam kegiatan kepramukaan dan memiliki sikap kepemimpinan yang baik." },
+            { kegiatan: "Desain Grafis Club", predikat: "Baik", keterangan: "Mampu membuat poster publikasi kegiatan PKBM secara mandiri." },
+          ],
+          sikapSpiritual: { predikat: "Sangat Baik", deskripsi: "Taat beribadah, selalu berdoa sebelum dan sesudah belajar, serta menghormati sesama." },
+          sikapSosial: { predikat: "Baik", deskripsi: "Santun, jujur, disiplin, dan mampu bekerja sama dalam kegiatan pemberdayaan." },
+          p5: {
+            tema: "Kewirausahaan", elemen: "Kemandirian dan Kreativitas",
+            judul: "Pengolahan Produk Pangan Lokal Khas Plumpang Berbasis Kemasan Digital",
+            deskripsi: "Kegiatan projek penguatan profil pelajar Pancasila untuk menumbuhkan jiwa wirausaha mandiri warga belajar.",
+            dimensi: { Mandiri: "SB", Kreatif: "BSH", "Bergotong Royong": "BSH" },
+            catatanProses: "Ananda sangat antusias merancang label kemasan produk dan berkolaborasi dengan kelompoknya dengan penuh tanggung jawab.",
+          },
+        },
+        {
+          id: "s2", nis: "20251002", nisn: "0089912045", password: "123456", nama: "Nurul Hidayah", jk: "Perempuan",
+          ttl: "Tuban, 22 Agustus 2008", agama: "Islam", statusKeluarga: "Anak Kandung", anakKe: "2",
+          alamat: "Ds. Klotok, Kec. Plumpang, Tuban", telepon: "085855441230",
+          sekolahAsal: "MTs Islamiyah Plumpang", diterimaKelas: "Fase E (Kelas 10)", diterimaTanggal: "14 Juli 2025",
+          namaAyah: "Bpk. Abdul Karim", namaIbu: "Ibu Aminatuz Zuhriyah", alamatOrtu: "Ds. Klotok, Kec. Plumpang, Tuban",
+          pekerjaanAyah: "Wiraswasta", pekerjaanIbu: "Pedagang", namaWali: "-", pekerjaanWali: "-",
+          rombelId: "r1", isActive: true, sakit: 2, izin: 1, alpa: 0,
+          catatanWali: "Ananda memiliki ketekunan dan etika belajar yang santun. Tingkatkan kepercayaan diri saat mempresentasikan hasil karya di depan kelas.",
+          keputusan: "Naik ke Fase F (Kelas XI)",
+          ekskul: [{ kegiatan: "Pramuka", predikat: "Baik", keterangan: "Mengikuti latihan kepramukaan dengan tertib dan penuh tanggung jawab." }],
+          sikapSpiritual: { predikat: "Sangat Baik", deskripsi: "Sangat rajin beribadah dan menjaga akhlak mulia." },
+          sikapSosial: { predikat: "Sangat Baik", deskripsi: "Sangat peduli terhadap teman dan lingkungan belajar." },
+          p5: {
+            tema: "Kewirausahaan", elemen: "Kemandirian dan Kreativitas",
+            judul: "Pengolahan Produk Pangan Lokal Khas Plumpang Berbasis Kemasan Digital",
+            deskripsi: "Kegiatan projek penguatan profil pelajar Pancasila untuk menumbuhkan jiwa wirausaha mandiri warga belajar.",
+            dimensi: { Mandiri: "BSH", Kreatif: "SB", "Bergotong Royong": "SB" },
+            catatanProses: "Ananda mampu menyusun perencanaan anggaran usaha dengan teliti dan bekerja sama dengan baik.",
+          },
+        },
+        {
+          id: "s3", nis: "20231205", nisn: "0067891234", password: "123456", nama: "Siti Aminah", jk: "Perempuan",
+          ttl: "Tuban, 21 September 2006", agama: "Islam", statusKeluarga: "Anak Kandung", anakKe: "1",
+          alamat: "Ds. Bandungrejo, Kec. Plumpang, Tuban", telepon: "081332908765",
+          sekolahAsal: "PKBM Ar Raudlotul Munawwaroh (Paket B)", diterimaKelas: "Tingkatan 5 (Kelas 10)", diterimaTanggal: "17 Juli 2023",
+          namaAyah: "Bpk. Moch. Sholeh", namaIbu: "Ibu Maimunah", alamatOrtu: "Ds. Bandungrejo, Kec. Plumpang, Tuban",
+          pekerjaanAyah: "Petani", pekerjaanIbu: "Ibu Rumah Tangga", namaWali: "-", pekerjaanWali: "-",
+          rombelId: "r2", isActive: true, sakit: 0, izin: 1, alpa: 0,
+          catatanWali: "Selamat atas pencapaian kompetensi yang sangat memuaskan di tingkat akhir Paket C. Semoga ilmu dan keterampilan yang diperoleh bermanfaat di masyarakat maupun dunia kerja.",
+          keputusan: "LULUS",
+          ekskul: [{ kegiatan: "Tata Boga & Kewirausahaan", predikat: "Sangat Baik", keterangan: "Terampil mengolah aneka kue tradisional dan manajemen usaha mikro." }],
+          sikapSpiritual: { predikat: "Sangat Baik", deskripsi: "Selalu berdoa sebelum dan sesudah belajar, menjalankan ibadah wajib dengan tertib, serta bersyukur atas hasil belajar." },
+          sikapSosial: { predikat: "Sangat Baik", deskripsi: "Memiliki sikap jujur, disiplin tinggi, santun kepada tutor, serta menjadi teladan bagi warga belajar lainnya." },
+          p5: { tema: "-", elemen: "-", judul: "-", deskripsi: "-", dimensi: {}, catatanProses: "-" },
+        },
+        {
+          id: "s4", nis: "20240801", nisn: "0102345678", password: "123456", nama: "Muhammad Fajar Siddiq", jk: "Laki-laki",
+          ttl: "Tuban, 03 Maret 2010", agama: "Islam", statusKeluarga: "Anak Kandung", anakKe: "3",
+          alamat: "Ds. Sembungrejo, Kec. Plumpang, Tuban", telepon: "085648120099",
+          sekolahAsal: "SDN Plumpang 2", diterimaKelas: "Fase D (Kelas 7)", diterimaTanggal: "15 Juli 2024",
+          namaAyah: "Bpk. Slamet Riyadi", namaIbu: "Ibu Sri Wahyuni", alamatOrtu: "Ds. Sembungrejo, Kec. Plumpang, Tuban",
+          pekerjaanAyah: "Buruh Tani", pekerjaanIbu: "Ibu Rumah Tangga", namaWali: "-", pekerjaanWali: "-",
+          rombelId: "r3", isActive: true, sakit: 1, izin: 0, alpa: 0,
+          catatanWali: "Ananda menunjukkan perkembangan literasi dan numerasi yang baik. Pertahankan semangat belajar dan keaktifan di kelas.",
+          keputusan: "Naik ke Fase D (Kelas IX)",
+          ekskul: [{ kegiatan: "Pramuka", predikat: "Baik", keterangan: "Aktif mengikuti kegiatan kepramukaan." }],
+          sikapSpiritual: { predikat: "Baik", deskripsi: "Taat beribadah dan berdoa sebelum belajar." },
+          sikapSosial: { predikat: "Baik", deskripsi: "Santun dan mudah bergaul dengan teman." },
+          p5: {
+            tema: "Gaya Hidup Berkelanjutan", elemen: "Beriman dan Berakhlak kepada Alam",
+            judul: "Pengelolaan Sampah Organik Lingkungan Belajar",
+            deskripsi: "Projek pembiasaan menjaga kebersihan dan pemanfaatan kompos.",
+            dimensi: { "Beriman & Bertakwa": "BSH", "Bergotong Royong": "BSH" },
+            catatanProses: "Ananda aktif berpartisipasi dalam pembuatan komposter sederhana bersama teman.",
+          },
+        },
+        {
+          id: "s5", nis: "20240501", nisn: "0134567891", password: "123456", nama: "Aisyah Putri Ramadhani", jk: "Perempuan",
+          ttl: "Tuban, 11 November 2013", agama: "Islam", statusKeluarga: "Anak Kandung", anakKe: "1",
+          alamat: "Ds. Magersari, Kec. Plumpang, Tuban", telepon: "085706123490",
+          sekolahAsal: "-", diterimaKelas: "Tingkatan 1 (Kelas 1)", diterimaTanggal: "15 Juli 2024",
+          namaAyah: "Bpk. Eko Prasetyo", namaIbu: "Ibu Nur Aini", alamatOrtu: "Ds. Magersari, Kec. Plumpang, Tuban",
+          pekerjaanAyah: "Karyawan Swasta", pekerjaanIbu: "Ibu Rumah Tangga", namaWali: "-", pekerjaanWali: "-",
+          rombelId: "r4", isActive: true, sakit: 0, izin: 0, alpa: 0,
+          catatanWali: "Ananda rajin hadir dan tekun berlatih membaca, menulis, serta berhitung. Pertahankan prestasi belajarnya.",
+          keputusan: "Naik ke Tingkatan 2 (Kelas VI)",
+          ekskul: [{ kegiatan: "Seni Kaligrafi", predikat: "Sangat Baik", keterangan: "Memiliki bakat dan ketekunan dalam seni menulis kaligrafi." }],
+          sikapSpiritual: { predikat: "Sangat Baik", deskripsi: "Rajin mengaji dan berdoa sebelum memulai pelajaran." },
+          sikapSosial: { predikat: "Sangat Baik", deskripsi: "Sopan kepada tutor dan suka menolong teman." },
+          p5: { tema: "-", elemen: "-", judul: "-", deskripsi: "-", dimensi: {}, catatanProses: "-" },
+        },
+      ],
+    };
+
+    function buildInitialNilaiMap(siswas, mapels) {
+      const initial = {};
+      siswas.forEach((s, sIdx) => {
+        initial[s.id] = {};
+        mapels.forEach((m, mIdx) => {
+          const baseScore = Math.min(96, 78 + ((sIdx * 3 + mIdx * 4) % 18));
+          const secondScore = Math.max(75, baseScore - 7);
+          const tpScores = {};
+          const tpList = m.tps.map((tp, tIdx) => {
+            const sc = tIdx === 0 ? baseScore : secondScore;
+            tpScores[tp.id] = sc;
+            return { deskripsi: tp.deskripsi, skor: sc };
+          });
+
+          const nPeng = baseScore;
+          const nKet = Math.min(98, baseScore + 2);
+          const kdPengList = m.kds
+            .filter((k) => k.aspek === "PENGETAHUAN")
+            .map((k) => ({ deskripsi: k.deskripsi, skor: nPeng }));
+          const kdKetList = m.kds
+            .filter((k) => k.aspek === "KETERAMPILAN")
+            .map((k) => ({ deskripsi: k.deskripsi, skor: nKet }));
+
+          initial[s.id][m.id] = {
+            tpScores,
+            nilaiAkhirMerdeka: Math.round((baseScore + secondScore) / 2),
+            deskripsiMerdeka: generateDeskripsiMerdeka(tpList),
+            nilaiPengetahuan: nPeng,
+            predikatPengetahuan: hitungPredikatK13(nPeng, m.kkm),
+            deskripsiPengetahuan: generateDeskripsiK13(kdPengList, m.kkm),
+            nilaiKeterampilan: nKet,
+            predikatKeterampilan: hitungPredikatK13(nKet, m.kkm),
+            deskripsiKeterampilan: generateDeskripsiK13(kdKetList, m.kkm),
+          };
+        });
+      });
+      return initial;
+    }
+
+    function buildInitialMapping(rombels, mapels) {
+      const mapping = {};
+      rombels.forEach((r) => {
+        mapping[`${r.program}::${r.faseTingkatan}`] = mapels.map((m) => m.id);
+      });
+      return mapping;
+    }
+
+    function loadAppState() {
+      const cloned = JSON.parse(JSON.stringify(DEFAULT_STATE));
+      cloned.nilaiMap = buildInitialNilaiMap(cloned.siswas, cloned.mapels);
+      cloned.tingkatanMapelMapping = buildInitialMapping(cloned.rombels, cloned.mapels);
+      return cloned;
+    }
+
+    let appData = loadAppState();
+    let lastSyncedTimestamp = 0;
+    let isApplyingRemoteUpdate = false;
+    let currentUser = null;
+    let activeTab = "dashboard";
+    let masterSubTab = "profil";
+    let selectedTingkatanKey = "Paket C::Fase E";
+    let penilaianRombelId = appData.rombels[0]?.id || "r1";
+    let penilaianMapelId = appData.mapels[0]?.id || "m1";
+    let p5RombelId = appData.rombels[0]?.id || "r1";
+    let waliRombelId = appData.rombels[0]?.id || "r1";
+    let cetakMode = "INDIVIDU";
+    let cetakRombelId = appData.rombels[0]?.id || "r1";
+    let cetakSiswaId = appData.siswas[0]?.id || "s1";
+    let printSampul = true;
+    let printIdentitas = true;
+    let printNilaiRapor = true;
+    let kolektifType = "SISWA";
+
+    const IDENTITAS_FIELD_OPTIONS = [
+      { key: "nama", label: "1. Nama Lengkap Warga Belajar" },
+      { key: "nisNisn", label: "2. NIS / NISN" },
+      { key: "ttl", label: "3. Tempat, Tanggal Lahir" },
+      { key: "jk", label: "4. Jenis Kelamin" },
+      { key: "agama", label: "5. Agama" },
+      { key: "statusKeluarga", label: "6. Status dalam Keluarga" },
+      { key: "anakKe", label: "7. Anak ke-" },
+      { key: "alamat", label: "8. Alamat Warga Belajar" },
+      { key: "telepon", label: "9. Nomor Telepon / HP" },
+      { key: "sekolahAsal", label: "10. Satuan Pendidikan Asal" },
+      { key: "diterimaDi", label: "11. Diterima di Satuan Pendidikan Ini" },
+      { key: "namaOrtu", label: "12. Nama Orang Tua (Ayah & Ibu)" },
+      { key: "alamatOrtu", label: "13. Alamat Orang Tua" },
+      { key: "pekerjaanOrtu", label: "14. Pekerjaan Orang Tua" },
+      { key: "namaWali", label: "15. Nama Wali Warga Belajar" },
+      { key: "pekerjaanWali", label: "16. Pekerjaan Wali Warga Belajar" },
+    ];
+
+    let selectedIdentitasFields = {};
+    IDENTITAS_FIELD_OPTIONS.forEach((f) => (selectedIdentitasFields[f.key] = true));
+
+    window.getAppDataSnapshot = function () {
+      return appData;
+    };
+
+    window.applyRemoteAppState = function (payloadJson, updatedAt, updatedBy) {
+      if (updatedAt && updatedAt <= lastSyncedTimestamp) return;
+      try {
+        const parsed = JSON.parse(payloadJson);
+        if (parsed && parsed.profil && Array.isArray(parsed.siswas)) {
+          isApplyingRemoteUpdate = true;
+          appData = parsed;
+          lastSyncedTimestamp = updatedAt || Date.now();
+          updateDynamicPrintStyle();
+
+          // Pertahankan fokus input jika user sedang mengetik di textarea/input
+          const activeEl = document.activeElement;
+          const isTyping =
+            activeEl &&
+            (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA") &&
+            activeEl.type !== "checkbox";
+          if (!isTyping) {
+            renderApp();
+          }
+          isApplyingRemoteUpdate = false;
+        }
+      } catch (e) {
+        isApplyingRemoteUpdate = false;
+      }
+    };
+
+    function saveAppState(silent = true) {
+      if (isApplyingRemoteUpdate) return;
+      lastSyncedTimestamp = Date.now();
+      if (window.cloudSync && window.cloudSync.enabled && typeof window.cloudSync.push === "function") {
+        window.cloudSync.push(appData, currentUser?.nama || "Pengguna");
+      }
+      if (!silent) {
+        showToast("Perubahan tersimpan secara live!");
+      }
+    }
+
+    function updateDynamicPrintStyle() {
+      const styleEl = document.getElementById("dynamic-print-page-style");
+      if (styleEl) {
+        const sizeRule = appData.printConfig.paperSize === "F4" ? "215mm 330mm" : "A4 portrait";
+        styleEl.textContent = `@page { size: ${sizeRule}; margin: ${appData.printConfig.marginTop}mm ${appData.printConfig.marginRight}mm ${appData.printConfig.marginBottom}mm ${appData.printConfig.marginLeft}mm; }`;
+      }
+    }
+
+    let toastTimer = null;
+    function showToast(msg) {
+      const box = document.getElementById("toast-box");
+      const txt = document.getElementById("toast-text");
+      if (!box || !txt) return;
+      txt.textContent = msg;
+      box.classList.remove("hidden");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => box.classList.add("hidden"), 3500);
+    }
+
+    // =========================================================================
+    // 3. MODAL GANTI PASSWORD & AUTENTIKASI LOGIN
+    // =========================================================================
+
+    function openPasswordModal() {
+      document.getElementById("old-my-pass").value = "";
+      document.getElementById("new-my-pass").value = "";
+      document.getElementById("confirm-my-pass").value = "";
+      document.getElementById("pass-modal-error").classList.add("hidden");
+      document.getElementById("password-modal").classList.remove("hidden");
+    }
+
+    function closePasswordModal() {
+      document.getElementById("password-modal").classList.add("hidden");
+    }
+
+    function handleSaveMyPassword(e) {
+      e.preventDefault();
+      const errBox = document.getElementById("pass-modal-error");
+      const oldP = document.getElementById("old-my-pass").value;
+      const newP = document.getElementById("new-my-pass").value;
+      const confP = document.getElementById("confirm-my-pass").value;
+
+      if (newP.length < 4) {
+        errBox.textContent = "Kata sandi baru minimal 4 karakter.";
+        errBox.classList.remove("hidden");
+        return;
+      }
+      if (newP !== confP) {
+        errBox.textContent = "Konfirmasi kata sandi baru tidak cocok.";
+        errBox.classList.remove("hidden");
+        return;
+      }
+
+      if (currentUser.role === "WARGA_BELAJAR") {
+        const st = appData.siswas.find((s) => s.id === currentUser.id);
+        if (st && st.password !== oldP) {
+          errBox.textContent = "Kata sandi lama tidak sesuai.";
+          errBox.classList.remove("hidden");
+          return;
+        }
+        st.password = newP;
+      } else {
+        const usr = appData.users.find((u) => u.id === currentUser.id);
+        if (usr && usr.password !== oldP) {
+          errBox.textContent = "Kata sandi lama tidak sesuai.";
+          errBox.classList.remove("hidden");
+          return;
+        }
+        usr.password = newP;
+      }
+
+      saveAppState();
+      closePasswordModal();
+      showToast("Kata sandi akun Anda berhasil diperbarui!");
+    }
+
+    function handleLoginSubmit(e) {
+      e.preventDefault();
+      const username = document.getElementById("login-username").value.trim();
+      const password = document.getElementById("login-password").value;
+      const errDiv = document.getElementById("login-error");
+
+      const foundStaff = appData.users.find(
+        (u) => u.username.toLowerCase() === username.toLowerCase() && u.password === password
+      );
+      if (foundStaff) {
+        currentUser = foundStaff;
+        activeTab = "dashboard";
+        renderApp();
+        showToast(`Selamat datang, ${foundStaff.nama}!`);
+        return;
+      }
+
+      const foundStudent = appData.siswas.find(
+        (s) =>
+          s.isActive !== false &&
+          (s.nis === username || (s.nisn && s.nisn === username)) &&
+          s.password === password
+      );
+      if (foundStudent) {
+        currentUser = {
+          id: foundStudent.id,
+          username: foundStudent.nis,
+          nama: foundStudent.nama,
+          role: "WARGA_BELAJAR",
+        };
+        cetakSiswaId = foundStudent.id;
+        activeTab = "rapor";
+        renderApp();
+        showToast(`Selamat datang, ${foundStudent.nama}!`);
+        return;
+      }
+
+      errDiv.textContent = "Username / NISN atau kata sandi tidak sesuai. Silakan periksa kembali.";
+      errDiv.classList.remove("hidden");
+    }
+
+    function handleLogout() {
+      currentUser = null;
+      activeTab = "dashboard";
+      renderApp();
+    }
+
+    // =========================================================================
+    // 4. RENDER HALAMAN LOGIN
+    // =========================================================================
+
+    function renderLoginView() {
+      const p = appData.profil;
+      return `
+        <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0A1F40] via-[#0F2C59] to-[#1D4ED8] p-4">
+          <div class="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden border border-blue-200">
+            <div class="bg-[#0F2C59] text-white p-6 text-center border-b-4 border-amber-400">
+              ${
+                p.logoPkbmBase64
+                  ? `<img src="${p.logoPkbmBase64}" alt="Logo PKBM" class="w-16 h-16 mx-auto rounded-2xl object-cover bg-white p-1 mb-3 shadow-lg" />`
+                  : `<div class="w-16 h-16 mx-auto bg-amber-400 text-[#0F2C59] rounded-2xl flex items-center justify-center mb-3 shadow-lg"><i data-lucide="book-open" class="w-9 h-9"></i></div>`
+              }
+              <p class="text-xs uppercase tracking-widest text-amber-300 font-bold">e-Rapor Pendidikan Kesetaraan Kemendikdasmen</p>
+              <h1 class="text-lg font-extrabold mt-1">${escapeHtml(p.namaSatuan)}</h1>
+              <p class="text-xs text-blue-200 mt-1">NPSN: ${escapeHtml(p.npsn)} • Kec. ${escapeHtml(p.kecamatan)}, Kab. ${escapeHtml(p.kabupaten)}, ${escapeHtml(p.provinsi)}</p>
+            </div>
+            <form onsubmit="handleLoginSubmit(event)" class="p-6 space-y-4">
+              <div id="login-error" class="hidden p-3 text-xs bg-red-50 text-red-700 border border-red-200 rounded-lg font-medium"></div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Username / NUPTK / NIS / NISN</label>
+                <div class="relative">
+                  <i data-lucide="user" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+                  <input type="text" id="login-username" required placeholder="Masukkan username atau NISN..." class="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-600 focus:outline-none" />
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Kata Sandi</label>
+                <div class="relative">
+                  <i data-lucide="lock" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+                  <input type="password" id="login-password" required placeholder="Masukkan kata sandi..." class="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-600 focus:outline-none" />
+                </div>
+              </div>
+              <button type="submit" class="w-full bg-[#1D4ED8] hover:bg-[#1E40AF] text-white font-bold py-2.5 rounded-lg transition flex items-center justify-center gap-2 shadow-md">
+                <i data-lucide="shield-check" class="w-4 h-4"></i> Masuk ke Aplikasi e-Rapor
+              </button>
+              <div class="pt-3 border-t border-slate-100 text-center text-[11px] text-slate-500">
+                Gunakan akun terdaftar (Admin: <strong class="text-slate-700">admin</strong> • Password default: <strong class="text-slate-700">123456</strong>)
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 5. MODUL DASHBOARD
+    // =========================================================================
+
+    function renderDashboardModule() {
+      const p = appData.profil;
+      const paketACount = appData.siswas.filter((s) => appData.rombels.find((r) => r.id === s.rombelId)?.program === "Paket A").length;
+      const paketBCount = appData.siswas.filter((s) => appData.rombels.find((r) => r.id === s.rombelId)?.program === "Paket B").length;
+      const paketCCount = appData.siswas.filter((s) => appData.rombels.find((r) => r.id === s.rombelId)?.program === "Paket C").length;
+      const merdekaCount = appData.rombels.filter((r) => r.kurikulum === "MERDEKA").length;
+      const k13Count = appData.rombels.filter((r) => r.kurikulum === "K13").length;
+      const tutorCount = appData.users.filter((u) => u.role === "TUTOR" || u.role === "WALI_KELAS").length;
+
+      return `
+        <div class="space-y-6">
+          <div class="bg-gradient-to-r from-[#0F2C59] via-[#1D4ED8] to-[#0284C7] text-white rounded-2xl p-6 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <span class="px-3 py-1 bg-amber-400 text-[#0F2C59] text-xs font-extrabold rounded-full">TP ${escapeHtml(p.tahunPelajaran)} • Semester ${escapeHtml(p.semester)}</span>
+              <h1 class="text-xl md:text-2xl font-extrabold mt-2">${escapeHtml(p.namaSatuan)}</h1>
+              <p class="text-blue-100 text-xs mt-1">NPSN: ${escapeHtml(p.npsn)} • ${escapeHtml(p.alamat)}, Kec. ${escapeHtml(p.kecamatan)}, Kab. ${escapeHtml(p.kabupaten)}, ${escapeHtml(p.provinsi)}</p>
+            </div>
+            <div class="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl px-4 py-3 text-xs shrink-0">
+              <p class="text-blue-200">Kepala Satuan Pendidikan</p>
+              <p class="font-bold text-sm mt-0.5">${escapeHtml(p.namaKepala)}</p>
+              <p class="text-blue-200 text-[11px] mt-0.5">Tgl Rapor: ${escapeHtml(p.tanggalRapor)}</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+              <div>
+                <p class="text-[11px] font-bold text-slate-400 uppercase">Total Warga Belajar</p>
+                <p class="text-2xl font-extrabold text-slate-800 mt-1">${appData.siswas.length}</p>
+                <p class="text-[11px] text-slate-500 mt-1">Paket A: ${paketACount} • B: ${paketBCount} • C: ${paketCCount}</p>
+              </div>
+              <div class="p-3 bg-blue-50 text-blue-600 rounded-xl"><i data-lucide="users" class="w-6 h-6"></i></div>
+            </div>
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+              <div>
+                <p class="text-[11px] font-bold text-slate-400 uppercase">Tutor & Pamong</p>
+                <p class="text-2xl font-extrabold text-slate-800 mt-1">${tutorCount}</p>
+                <p class="text-[11px] text-slate-500 mt-1">${appData.mapels.length} Mapel Kesetaraan</p>
+              </div>
+              <div class="p-3 bg-emerald-50 text-emerald-600 rounded-xl"><i data-lucide="graduation-cap" class="w-6 h-6"></i></div>
+            </div>
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+              <div>
+                <p class="text-[11px] font-bold text-slate-400 uppercase">Rombel Merdeka</p>
+                <p class="text-2xl font-extrabold text-indigo-700 mt-1">${merdekaCount}</p>
+                <p class="text-[11px] text-slate-500 mt-1">Berbasis Fase, TP & P5</p>
+              </div>
+              <div class="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><i data-lucide="layers" class="w-6 h-6"></i></div>
+            </div>
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+              <div>
+                <p class="text-[11px] font-bold text-slate-400 uppercase">Rombel K-13</p>
+                <p class="text-2xl font-extrabold text-amber-700 mt-1">${k13Count}</p>
+                <p class="text-[11px] text-slate-500 mt-1">Tingkatan, KKM, KI-3 & KI-4</p>
+              </div>
+              <div class="p-3 bg-amber-50 text-amber-600 rounded-xl"><i data-lucide="book-marked" class="w-6 h-6"></i></div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2">
+              <div>
+                <h3 class="font-bold text-slate-800 text-base">Progres Penginputan Nilai & Status Kurikulum Rombel</h3>
+                <p class="text-xs text-slate-500">Monitoring kelengkapan penilaian intrakurikuler sebelum pencetakan rapor semester.</p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                ${
+                  currentUser.role === "ADMIN"
+                    ? `<button onclick="navigateTab('master','kolektif')" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 shadow-sm"><i data-lucide="user-plus" class="w-3.5 h-3.5"></i> Input Kolektif Siswa & Guru</button>`
+                    : ""
+                }
+                ${
+                  currentUser.role !== "WARGA_BELAJAR"
+                    ? `<button onclick="navigateTab('penilaian')" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition">Mulai Input Nilai →</button>`
+                    : `<button onclick="navigateTab('rapor')" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition">Lihat & Cetak Rapor →</button>`
+                }
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs text-left">
+                <thead class="bg-slate-50 text-slate-600 border-b">
+                  <tr>
+                    <th class="py-3 px-4">Nama Rombel</th>
+                    <th class="py-3 px-4">Program & Fase/Tingkatan</th>
+                    <th class="py-3 px-4">Kurikulum</th>
+                    <th class="py-3 px-4">Wali Kelas / Pamong</th>
+                    <th class="py-3 px-4 text-center">Jml WB</th>
+                    <th class="py-3 px-4">Progres Keterisian</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  ${appData.rombels
+                    .map((r) => {
+                      const members = appData.siswas.filter((s) => s.rombelId === r.id);
+                      const wali = appData.users.find((u) => u.id === r.waliKelasId);
+                      let filled = 0;
+                      const totalCells = members.length * appData.mapels.length;
+                      members.forEach((m) => {
+                        appData.mapels.forEach((mp) => {
+                          if (appData.nilaiMap[m.id]?.[mp.id]) filled++;
+                        });
+                      });
+                      const pct = totalCells > 0 ? Math.round((filled / totalCells) * 100) : 100;
+                      return `
+                        <tr class="hover:bg-blue-50/40">
+                          <td class="py-3 px-4 font-bold text-slate-800">${escapeHtml(r.namaRombel)}</td>
+                          <td class="py-3 px-4">${escapeHtml(r.program)} • ${escapeHtml(r.faseTingkatan)} (Kls ${r.tingkatKelas})</td>
+                          <td class="py-3 px-4">
+                            ${
+                              r.kurikulum === "MERDEKA"
+                                ? `<span class="px-2.5 py-1 rounded-full font-bold bg-indigo-100 text-indigo-800">Kurikulum Merdeka</span>`
+                                : `<span class="px-2.5 py-1 rounded-full font-bold bg-amber-100 text-amber-800">Kurikulum 2013 (K-13)</span>`
+                            }
+                          </td>
+                          <td class="py-3 px-4">${escapeHtml(wali?.nama || "-")}</td>
+                          <td class="py-3 px-4 text-center font-bold">${members.length}</td>
+                          <td class="py-3 px-4 w-48">
+                            <div class="flex items-center gap-2">
+                              <div class="flex-1 bg-slate-200 rounded-full h-2 overflow-hidden">
+                                <div class="bg-emerald-600 h-full rounded-full" style="width:${pct}%"></div>
+                              </div>
+                              <span class="font-bold text-slate-700">${pct}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      `;
+                    })
+                    .join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 6. MODUL DATA MASTER & PENGATURAN (ADMIN)
+    // =========================================================================
+
+    function getTingkatanOptions() {
+      const defaults = [
+        { key: "Paket A::Fase A", program: "Paket A", faseTingkatan: "Fase A", kurikulum: "MERDEKA", label: "Paket A — Fase A (Kelas 1-2 Merdeka)" },
+        { key: "Paket A::Fase B", program: "Paket A", faseTingkatan: "Fase B", kurikulum: "MERDEKA", label: "Paket A — Fase B (Kelas 3-4 Merdeka)" },
+        { key: "Paket A::Fase C", program: "Paket A", faseTingkatan: "Fase C", kurikulum: "MERDEKA", label: "Paket A — Fase C (Kelas 5-6 Merdeka)" },
+        { key: "Paket A::Tingkatan 1", program: "Paket A", faseTingkatan: "Tingkatan 1", kurikulum: "K13", label: "Paket A — Tingkatan 1 (Kelas 1-3 K-13)" },
+        { key: "Paket A::Tingkatan 2", program: "Paket A", faseTingkatan: "Tingkatan 2", kurikulum: "K13", label: "Paket A — Tingkatan 2 (Kelas 4-6 K-13)" },
+        { key: "Paket B::Fase D", program: "Paket B", faseTingkatan: "Fase D", kurikulum: "MERDEKA", label: "Paket B — Fase D (Kelas 7-9 Merdeka)" },
+        { key: "Paket B::Tingkatan 3", program: "Paket B", faseTingkatan: "Tingkatan 3", kurikulum: "K13", label: "Paket B — Tingkatan 3 (Kelas 7-8 K-13)" },
+        { key: "Paket B::Tingkatan 4", program: "Paket B", faseTingkatan: "Tingkatan 4", kurikulum: "K13", label: "Paket B — Tingkatan 4 (Kelas 9 K-13)" },
+        { key: "Paket C::Fase E", program: "Paket C", faseTingkatan: "Fase E", kurikulum: "MERDEKA", label: "Paket C — Fase E (Kelas 10 Merdeka)" },
+        { key: "Paket C::Fase F", program: "Paket C", faseTingkatan: "Fase F", kurikulum: "MERDEKA", label: "Paket C — Fase F (Kelas 11-12 Merdeka)" },
+        { key: "Paket C::Tingkatan 5", program: "Paket C", faseTingkatan: "Tingkatan 5", kurikulum: "K13", label: "Paket C — Tingkatan 5 (Kelas 10-11 K-13)" },
+        { key: "Paket C::Tingkatan 6", program: "Paket C", faseTingkatan: "Tingkatan 6", kurikulum: "K13", label: "Paket C — Tingkatan 6 (Kelas 12 K-13)" },
+      ];
+      const mapByKey = new Map(defaults.map((d) => [d.key, d]));
+      appData.rombels.forEach((r) => {
+        const k = `${r.program}::${r.faseTingkatan}`;
+        if (!mapByKey.has(k)) {
+          mapByKey.set(k, { key: k, program: r.program, faseTingkatan: r.faseTingkatan, kurikulum: r.kurikulum, label: `${r.program} — ${r.faseTingkatan} (${r.kurikulum})` });
+        }
+      });
+      return Array.from(mapByKey.values());
+    }
+
+    function renderMasterDataModule() {
+      const subTabs = [
+        { id: "profil", label: "1. Profil & Logo PKBM", icon: "building-2" },
+        { id: "rombel", label: "2. Rombel Kurikulum", icon: "layers" },
+        { id: "mapel", label: "3. Mapel & SKK", icon: "book-marked" },
+        { id: "mapping", label: "4. Mapping & Urutan Mapel", icon: "sliders" },
+        { id: "siswa", label: "5. Warga Belajar", icon: "users" },
+        { id: "kolektif", label: "6. Input Kolektif", icon: "user-plus" },
+        { id: "akun", label: "7. Akun & Password", icon: "key-round" },
+        { id: "cetak", label: "8. Cetak & TTD", icon: "printer" },
+        { id: "backup", label: "9. Backup & Restore", icon: "folder-archive" },
+      ];
+
+      let contentHtml = "";
+
+      if (masterSubTab === "profil") {
+        const p = appData.profil;
+        contentHtml = `
+          <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-5">
+            <div class="border-b pb-3">
+              <h3 class="font-bold text-slate-800 text-base">Identitas Satuan Pendidikan & Upload Logo Sampul</h3>
+              <p class="text-xs text-slate-500">Logo yang diunggah akan tampil di header aplikasi dan Sampul Rapor (ukuran 8cm).</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div class="border border-dashed border-slate-300 rounded-xl p-5 flex flex-col items-center justify-center text-center bg-slate-50">
+                ${
+                  p.logoPkbmBase64
+                    ? `<img src="${p.logoPkbmBase64}" alt="Logo PKBM" class="w-28 h-28 object-contain mb-3 rounded-lg bg-white p-2 border shadow-sm" />`
+                    : `<div class="w-28 h-28 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center mb-3"><i data-lucide="building-2" class="w-12 h-12"></i></div>`
+                }
+                <label class="cursor-pointer px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5">
+                  <i data-lucide="upload" class="w-3.5 h-3.5"></i> Upload Logo PKBM
+                  <input type="file" accept="image/*" onchange="handleLogoUpload(event)" class="hidden" />
+                </label>
+                ${
+                  p.logoPkbmBase64
+                    ? `<button type="button" onclick="appData.profil.logoPkbmBase64='';saveAppState();renderApp();" class="mt-2 text-[11px] text-red-600 underline">Hapus Logo Kustom</button>`
+                    : ""
+                }
+              </div>
+              <div class="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div><label class="font-bold text-slate-700 block mb-1">Nama Satuan Pendidikan</label><input type="text" id="prof-nama" value="${escapeHtml(p.namaSatuan)}" class="w-full border rounded-lg px-3 py-2 font-semibold" /></div>
+                <div><label class="font-bold text-slate-700 block mb-1">NPSN</label><input type="text" id="prof-npsn" value="${escapeHtml(p.npsn)}" class="w-full border rounded-lg px-3 py-2" /></div>
+                <div class="sm:col-span-2"><label class="font-bold text-slate-700 block mb-1">Alamat Lengkap</label><input type="text" id="prof-alamat" value="${escapeHtml(p.alamat)}" class="w-full border rounded-lg px-3 py-2" /></div>
+                <div><label class="font-bold text-slate-700 block mb-1">Kecamatan</label><input type="text" id="prof-kec" value="${escapeHtml(p.kecamatan)}" class="w-full border rounded-lg px-3 py-2" /></div>
+                <div><label class="font-bold text-slate-700 block mb-1">Kabupaten / Provinsi</label><input type="text" value="${escapeHtml(p.kabupaten)}, ${escapeHtml(p.provinsi)}" readonly class="w-full border rounded-lg px-3 py-2 bg-slate-50" /></div>
+                <div><label class="font-bold text-slate-700 block mb-1">Nama Kepala PKBM</label><input type="text" id="prof-kepala" value="${escapeHtml(p.namaKepala)}" class="w-full border rounded-lg px-3 py-2 font-semibold" /></div>
+                <div><label class="font-bold text-slate-700 block mb-1">NIP / NUPTK Kepala</label><input type="text" id="prof-nip" value="${escapeHtml(p.nipKepala)}" class="w-full border rounded-lg px-3 py-2" /></div>
+                <div>
+                  <label class="font-bold text-slate-700 block mb-1">Tahun Pelajaran & Semester</label>
+                  <div class="flex gap-2">
+                    <input type="text" id="prof-tp" value="${escapeHtml(p.tahunPelajaran)}" class="w-1/2 border rounded-lg px-3 py-2" />
+                    <select id="prof-sem" class="w-1/2 border rounded-lg px-2 py-2">
+                      <option value="1 (Ganjil)" ${p.semester === "1 (Ganjil)" ? "selected" : ""}>1 (Ganjil)</option>
+                      <option value="2 (Genap)" ${p.semester === "2 (Genap)" ? "selected" : ""}>2 (Genap)</option>
+                    </select>
+                  </div>
+                </div>
+                <div><label class="font-bold text-slate-700 block mb-1">Tempat & Tanggal Rapor</label><input type="text" id="prof-tgl" value="${escapeHtml(p.tanggalRapor)}" class="w-full border rounded-lg px-3 py-2 font-semibold text-blue-800" /></div>
+              </div>
+            </div>
+            <div class="flex justify-end pt-3 border-t">
+              <button onclick="saveProfilLembaga()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-2"><i data-lucide="save" class="w-4 h-4"></i> Simpan Profil Lembaga</button>
+            </div>
+          </div>
+        `;
+      } else if (masterSubTab === "rombel") {
+        contentHtml = `
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <form onsubmit="handleAddRombel(event)" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3 text-xs h-fit">
+              <h3 class="font-bold text-slate-800 text-sm border-b pb-2">Tambah Rombel Baru</h3>
+              <div><label class="font-bold block mb-1">Nama Rombel</label><input type="text" id="rb-nama" required placeholder="Contoh: Paket C - Fase F (Kelas 11)" class="w-full border rounded-lg px-3 py-2" /></div>
+              <div class="grid grid-cols-2 gap-2">
+                <div><label class="font-bold block mb-1">Program Paket</label>
+                  <select id="rb-prog" class="w-full border rounded-lg px-2 py-2"><option value="Paket A">Paket A (SD)</option><option value="Paket B">Paket B (SMP)</option><option value="Paket C" selected>Paket C (SMA)</option></select>
+                </div>
+                <div><label class="font-bold block mb-1">Kurikulum</label>
+                  <select id="rb-kur" class="w-full border rounded-lg px-2 py-2 font-bold"><option value="MERDEKA">Kurikulum Merdeka</option><option value="K13">Kurikulum 2013 (K-13)</option></select>
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div><label class="font-bold block mb-1">Tingkat Kelas</label><input type="number" id="rb-kls" min="1" max="12" value="11" class="w-full border rounded-lg px-3 py-2" /></div>
+                <div><label class="font-bold block mb-1">Fase / Tingkatan</label><input type="text" id="rb-fase" value="Fase F" class="w-full border rounded-lg px-3 py-2" /></div>
+              </div>
+              <div><label class="font-bold block mb-1">Wali Kelas / Pamong</label>
+                <select id="rb-wali" class="w-full border rounded-lg px-2 py-2">
+                  ${appData.users.filter((u) => u.role !== "ADMIN").map((u) => `<option value="${u.id}">${escapeHtml(u.nama)}</option>`).join("")}
+                </select>
+              </div>
+              <button type="submit" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg flex items-center justify-center gap-1.5"><i data-lucide="plus" class="w-4 h-4"></i> Simpan Rombel</button>
+            </form>
+            <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+              <div class="p-4 border-b font-bold text-sm text-slate-800">Daftar Rombongan Belajar Aktif (${appData.rombels.length})</div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs text-left">
+                  <thead class="bg-slate-50 border-b"><tr><th class="p-3">Nama Rombel</th><th class="p-3">Program</th><th class="p-3">Fase/Tingkatan</th><th class="p-3">Kurikulum</th><th class="p-3">Wali Kelas</th><th class="p-3 text-right">Aksi</th></tr></thead>
+                  <tbody class="divide-y">
+                    ${appData.rombels.map((r) => `
+                      <tr>
+                        <td class="p-3 font-bold">${escapeHtml(r.namaRombel)}</td>
+                        <td class="p-3">${escapeHtml(r.program)}</td>
+                        <td class="p-3">${escapeHtml(r.faseTingkatan)} (Kls ${r.tingkatKelas})</td>
+                        <td class="p-3">
+                          <select onchange="changeRombelKurikulum('${r.id}', this.value)" class="border rounded px-2 py-1 font-bold bg-slate-50">
+                            <option value="MERDEKA" ${r.kurikulum === "MERDEKA" ? "selected" : ""}>MERDEKA</option>
+                            <option value="K13" ${r.kurikulum === "K13" ? "selected" : ""}>K13</option>
+                          </select>
+                        </td>
+                        <td class="p-3">${escapeHtml(appData.users.find((u) => u.id === r.waliKelasId)?.nama || "-")}</td>
+                        <td class="p-3 text-right">
+                          <button type="button" onclick="deleteRombel('${r.id}')" class="px-2.5 py-1 rounded text-[11px] font-bold bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 inline-flex items-center gap-1"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Hapus</button>
+                        </td>
+                      </tr>
+                    `).join("")}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (masterSubTab === "mapel") {
+        contentHtml = `
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <form onsubmit="handleAddMapel(event)" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3 text-xs h-fit">
+              <h3 class="font-bold text-slate-800 text-sm border-b pb-2">Tambah Mata Pelajaran Kesetaraan</h3>
+              <div><label class="font-bold block mb-1">Nama Mata Pelajaran</label><input type="text" id="mp-nama" required placeholder="Contoh: Ekonomi / Tata Busana" class="w-full border rounded-lg px-3 py-2" /></div>
+              <div><label class="font-bold block mb-1">Kelompok Mapel</label>
+                <select id="mp-kel" class="w-full border rounded-lg px-2 py-2"><option value="UMUM">Kelompok Umum</option><option value="PEMINATAN">Kelompok Peminatan (Paket C)</option><option value="PEMBERDAYAAN">Kelompok Pemberdayaan</option><option value="KETERAMPILAN">Kelompok Keterampilan</option></select>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div><label class="font-bold block mb-1">Bobot SKK</label><input type="number" id="mp-skk" min="1" max="6" value="2" class="w-full border rounded-lg px-3 py-2" /></div>
+                <div><label class="font-bold block mb-1">KKM (K-13)</label><input type="number" id="mp-kkm" min="60" max="90" value="75" class="w-full border rounded-lg px-3 py-2" /></div>
+              </div>
+              <button type="submit" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg flex items-center justify-center gap-1.5"><i data-lucide="plus" class="w-4 h-4"></i> Tambah Mata Pelajaran</button>
+            </form>
+            <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+              <div class="p-4 border-b flex justify-between items-center">
+                <span class="font-bold text-sm text-slate-800">Daftar Mata Pelajaran, SKK, KKM & Status Aktif</span>
+                <span class="text-[11px] text-slate-500">*Mapel Tidak Aktif disembunyikan dari penilaian & rapor</span>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs text-left">
+                  <thead class="bg-slate-50 border-b"><tr><th class="p-3">Mata Pelajaran</th><th class="p-3">Kelompok</th><th class="p-3 text-center">SKK</th><th class="p-3 text-center">KKM</th><th class="p-3 text-center">Status</th><th class="p-3 text-right">Aksi</th></tr></thead>
+                  <tbody class="divide-y">
+                    ${appData.mapels.map((m) => {
+                      const active = m.isActive !== false;
+                      return `
+                        <tr class="${!active ? "bg-slate-50/70 opacity-75" : ""}">
+                          <td class="p-3 font-bold text-slate-800">${escapeHtml(m.nama)}</td>
+                          <td class="p-3"><span class="px-2 py-0.5 rounded bg-slate-100 font-semibold text-[11px]">${escapeHtml(m.kelompok)}</span></td>
+                          <td class="p-3 text-center font-bold">${m.skk}</td>
+                          <td class="p-3 text-center"><input type="number" value="${m.kkm}" onchange="updateMapelKkm('${m.id}', this.value)" class="w-14 text-center border rounded py-1 font-bold text-emerald-700" /></td>
+                          <td class="p-3 text-center">${active ? `<span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">AKTIF</span>` : `<span class="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-bold text-[10px]">TIDAK AKTIF</span>`}</td>
+                          <td class="p-3 text-right">
+                            <div class="inline-flex items-center gap-1">
+                              <button type="button" onclick="toggleMapelStatus('${m.id}', true)" class="px-2 py-1 rounded text-[10px] font-bold border ${active ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-emerald-700 border-emerald-300"}">Aktif</button>
+                              <button type="button" onclick="toggleMapelStatus('${m.id}', false)" class="px-2 py-1 rounded text-[10px] font-bold border ${!active ? "bg-amber-600 text-white border-amber-600" : "bg-white text-amber-700 border-amber-300"}">Tidak Aktif</button>
+                              <button type="button" onclick="deleteMapel('${m.id}')" class="px-2 py-1 rounded text-[10px] font-bold bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 inline-flex items-center gap-0.5"><i data-lucide="trash-2" class="w-3 h-3"></i> Hapus</button>
+                            </div>
+                          </td>
+                        </tr>
+                      `;
+                    }).join("")}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (masterSubTab === "mapping") {
+        const opts = getTingkatanOptions();
+        const currT = opts.find((t) => t.key === selectedTingkatanKey) || opts[0];
+        const mappedIds = appData.tingkatanMapelMapping[currT.key] || appData.mapels.filter((m) => m.isActive !== false).map((m) => m.id);
+        const orderedMapels = [
+          ...mappedIds.map((id) => appData.mapels.find((m) => m.id === id)).filter(Boolean),
+          ...appData.mapels.filter((m) => !mappedIds.includes(m.id)),
+        ];
+
+        contentHtml = `
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden space-y-4 p-5">
+            <div class="flex flex-wrap justify-between items-center gap-4 border-b pb-4">
+              <div>
+                <h3 class="font-bold text-slate-800 text-base">Mapping Mata Pelajaran & Urutan Cetak Rapor per Tingkatan / Fase</h3>
+                <p class="text-xs text-slate-500">Atur mata pelajaran dan urutan tampil saat cetak rapor secara berbeda untuk tiap Tingkatan / Fase.</p>
+              </div>
+              <div class="w-full sm:w-96">
+                <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Pilih Program & Tingkatan / Fase:</label>
+                <select onchange="selectedTingkatanKey=this.value;renderApp();" class="w-full border border-blue-300 bg-blue-50/50 rounded-lg px-3 py-2 text-xs font-bold text-blue-900">
+                  ${opts.map((o) => `<option value="${o.key}" ${o.key === currT.key ? "selected" : ""}>${escapeHtml(o.label)}</option>`).join("")}
+                </select>
+              </div>
+            </div>
+            <div class="flex flex-wrap justify-between items-center gap-2 bg-slate-50 p-3 rounded-lg border text-xs">
+              <div><span class="font-bold text-slate-800">${escapeHtml(currT.label)}</span> • <span class="text-blue-700 font-semibold">${mappedIds.length} dari ${appData.mapels.length} Mapel Dipetakan</span></div>
+              <button type="button" onclick="selectAllMapelForTingkatan('${currT.key}')" class="px-3 py-1.5 bg-blue-100 text-blue-800 font-bold rounded hover:bg-blue-200">Pilih Semua Mapel Aktif</button>
+            </div>
+            <div class="overflow-x-auto border rounded-xl">
+              <table class="w-full text-xs text-left">
+                <thead class="bg-slate-100 border-b text-slate-700"><tr><th class="p-3 w-12 text-center">Pilih</th><th class="p-3 w-24 text-center">Urutan Cetak</th><th class="p-3 w-28 text-center">Geser</th><th class="p-3">Nama Mata Pelajaran</th><th class="p-3">Kelompok</th><th class="p-3 text-center">SKK</th><th class="p-3 text-center">KKM</th></tr></thead>
+                <tbody class="divide-y">
+                  ${orderedMapels.map((m) => {
+                    const orderIdx = mappedIds.indexOf(m.id);
+                    const isChecked = orderIdx !== -1;
+                    return `
+                      <tr class="${isChecked ? "bg-blue-50/30" : ""}">
+                        <td class="p-3 text-center"><input type="checkbox" ${isChecked ? "checked" : ""} onchange="toggleMapelInTingkatan('${currT.key}','${m.id}')" class="w-4 h-4 accent-blue-600 cursor-pointer" /></td>
+                        <td class="p-3 text-center font-bold text-blue-900">${isChecked ? orderIdx + 1 : "-"}</td>
+                        <td class="p-3 text-center">
+                          ${isChecked ? `
+                            <div class="inline-flex gap-1">
+                              <button type="button" ${orderIdx === 0 ? "disabled" : ""} onclick="moveMapelOrder('${currT.key}','${m.id}','UP')" class="px-2 py-1 rounded border bg-white hover:bg-slate-100 disabled:opacity-40 font-bold">↑</button>
+                              <button type="button" ${orderIdx === mappedIds.length - 1 ? "disabled" : ""} onclick="moveMapelOrder('${currT.key}','${m.id}','DOWN')" class="px-2 py-1 rounded border bg-white hover:bg-slate-100 disabled:opacity-40 font-bold">↓</button>
+                            </div>
+                          ` : "-"}
+                        </td>
+                        <td class="p-3 font-bold text-slate-800">${escapeHtml(m.nama)}</td>
+                        <td class="p-3">${escapeHtml(m.kelompok)}</td>
+                        <td class="p-3 text-center font-bold">${m.skk}</td>
+                        <td class="p-3 text-center font-bold">${m.kkm}</td>
+                      </tr>
+                    `;
+                  }).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      } else if (masterSubTab === "siswa") {
+        contentHtml = `
+          <div class="space-y-6">
+            <form onsubmit="handleAddSiswa(event)" class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4 text-xs">
+              <div class="flex flex-wrap justify-between items-center gap-2 border-b pb-3">
+                <div>
+                  <h3 class="font-bold text-slate-800 text-sm">Formulir Input Data Warga Belajar (16 Item Biodata Resmi Rapor)</h3>
+                  <p class="text-[11px] text-slate-500">Data otomatis tercetak pada halaman Keterangan Tentang Diri Peserta Didik.</p>
+                </div>
+                <div class="w-full sm:w-64">
+                  <label class="font-bold text-blue-800 block mb-1">Rombel Penempatan *</label>
+                  <select id="sw-rombel" class="w-full border border-blue-300 bg-blue-50/50 rounded-lg px-2.5 py-2 font-bold text-blue-900">
+                    ${appData.rombels.map((r) => `<option value="${r.id}">${escapeHtml(r.namaRombel)}</option>`).join("")}
+                  </select>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div><label class="font-bold block mb-1">1. Nama Peserta Didik (Lengkap) *</label><input type="text" id="sw-nama" required class="w-full border rounded-lg px-3 py-2 font-semibold" /></div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div><label class="font-bold block mb-1">2a. NIS *</label><input type="text" id="sw-nis" required class="w-full border rounded-lg px-2.5 py-2" /></div>
+                  <div><label class="font-bold block mb-1">2b. NISN</label><input type="text" id="sw-nisn" class="w-full border rounded-lg px-2.5 py-2" /></div>
+                </div>
+                <div><label class="font-bold block mb-1">3. Tempat, Tanggal Lahir</label><input type="text" id="sw-ttl" value="Tuban, 10 Januari 2008" class="w-full border rounded-lg px-3 py-2" /></div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div><label class="font-bold block mb-1">4. Jenis Kelamin</label><select id="sw-jk" class="w-full border rounded-lg px-2 py-2 bg-white"><option value="Laki-laki">Laki-laki</option><option value="Perempuan">Perempuan</option></select></div>
+                  <div><label class="font-bold block mb-1">5. Agama</label><select id="sw-agama" class="w-full border rounded-lg px-2 py-2 bg-white"><option value="Islam">Islam</option><option value="Kristen">Kristen</option><option value="Katolik">Katolik</option><option value="Hindu">Hindu</option><option value="Buddha">Buddha</option></select></div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div><label class="font-bold block mb-1">6. Status Keluarga</label><select id="sw-status" class="w-full border rounded-lg px-2 py-2 bg-white"><option value="Anak Kandung">Anak Kandung</option><option value="Anak Tiri">Anak Tiri</option><option value="Anak Angkat">Anak Angkat</option></select></div>
+                  <div><label class="font-bold block mb-1">7. Anak ke-</label><input type="text" id="sw-anakke" value="1" class="w-full border rounded-lg px-3 py-2" /></div>
+                </div>
+                <div><label class="font-bold block mb-1">8. Alamat Peserta Didik</label><input type="text" id="sw-alamat" value="Ds. Plumpang, Kec. Plumpang, Tuban" class="w-full border rounded-lg px-3 py-2" /></div>
+                <div><label class="font-bold block mb-1">9. Nomor Telepon / HP</label><input type="text" id="sw-telp" class="w-full border rounded-lg px-3 py-2" /></div>
+                <div><label class="font-bold block mb-1">10. Satuan Pendidikan Asal</label><input type="text" id="sw-asal" class="w-full border rounded-lg px-3 py-2" /></div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div><label class="font-bold block mb-1">11a. Diterima di Kelas/Fase</label><input type="text" id="sw-ditkls" value="Fase E (Kelas 10)" class="w-full border rounded-lg px-2.5 py-2" /></div>
+                  <div><label class="font-bold block mb-1">11b. Pada Tanggal</label><input type="text" id="sw-dittgl" value="14 Juli 2025" class="w-full border rounded-lg px-2.5 py-2" /></div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div><label class="font-bold block mb-1">12a. Nama Ayah</label><input type="text" id="sw-ayah" class="w-full border rounded-lg px-2.5 py-2" /></div>
+                  <div><label class="font-bold block mb-1">12b. Nama Ibu</label><input type="text" id="sw-ibu" class="w-full border rounded-lg px-2.5 py-2" /></div>
+                </div>
+                <div><label class="font-bold block mb-1">13. Alamat Orang Tua</label><input type="text" id="sw-alamatortu" value="Ds. Plumpang, Kec. Plumpang, Tuban" class="w-full border rounded-lg px-3 py-2" /></div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div><label class="font-bold block mb-1">14a. Pekerjaan Ayah</label><input type="text" id="sw-pkayah" class="w-full border rounded-lg px-2.5 py-2" /></div>
+                  <div><label class="font-bold block mb-1">14b. Pekerjaan Ibu</label><input type="text" id="sw-pkibu" class="w-full border rounded-lg px-2.5 py-2" /></div>
+                </div>
+                <div><label class="font-bold block mb-1">15. Nama Wali Peserta Didik</label><input type="text" id="sw-wali" value="-" class="w-full border rounded-lg px-3 py-2" /></div>
+                <div><label class="font-bold block mb-1">16. Pekerjaan Wali</label><input type="text" id="sw-pkwali" value="-" class="w-full border rounded-lg px-3 py-2" /></div>
+              </div>
+              <div class="flex justify-end pt-3 border-t">
+                <button type="submit" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg flex items-center gap-1.5 shadow-sm"><i data-lucide="plus" class="w-4 h-4"></i> Simpan Data Lengkap Warga Belajar</button>
+              </div>
+            </form>
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+              <div class="p-4 border-b flex justify-between items-center">
+                <span class="font-bold text-sm text-slate-800">Daftar Warga Belajar Terdaftar (${appData.siswas.length})</span>
+                <button onclick="masterSubTab='kolektif';renderApp();" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5"><i data-lucide="user-plus" class="w-3.5 h-3.5"></i> Input Kolektif Siswa</button>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs text-left">
+                  <thead class="bg-slate-50 border-b"><tr><th class="p-3">NIS / NISN</th><th class="p-3">Nama Peserta Didik</th><th class="p-3">TTL & L/P</th><th class="p-3">Orang Tua</th><th class="p-3">Rombel</th><th class="p-3 text-center">Status</th><th class="p-3 text-right">Aksi Status</th></tr></thead>
+                  <tbody class="divide-y">
+                    ${appData.siswas.map((s) => {
+                      const active = s.isActive !== false;
+                      return `
+                        <tr class="${!active ? "bg-slate-100/75 opacity-75" : ""}">
+                          <td class="p-3">${escapeHtml(s.nis)} / ${escapeHtml(s.nisn)}</td>
+                          <td class="p-3 font-bold text-slate-800">${escapeHtml(s.nama)}</td>
+                          <td class="p-3">${escapeHtml(s.ttl)} (${s.jk === "Laki-laki" ? "L" : "P"})</td>
+                          <td class="p-3">${escapeHtml(s.namaAyah || "-")} / ${escapeHtml(s.namaIbu || "-")}</td>
+                          <td class="p-3">${escapeHtml(appData.rombels.find((r) => r.id === s.rombelId)?.namaRombel || "-")}</td>
+                          <td class="p-3 text-center">${active ? `<span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">AKTIF</span>` : `<span class="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-bold text-[10px]">TIDAK AKTIF</span>`}</td>
+                          <td class="p-3 text-right">
+                            <div class="inline-flex items-center gap-1">
+                              <button type="button" onclick="toggleSiswaStatus('${s.id}', true)" class="px-2 py-1 rounded text-[10px] font-bold border ${active ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-emerald-700 border-emerald-300"}">Aktif</button>
+                              <button type="button" onclick="toggleSiswaStatus('${s.id}', false)" class="px-2 py-1 rounded text-[10px] font-bold border ${!active ? "bg-amber-600 text-white border-amber-600" : "bg-white text-amber-700 border-amber-300"}">Tidak Aktif</button>
+                            </div>
+                          </td>
+                        </tr>
+                      `;
+                    }).join("")}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (masterSubTab === "kolektif") {
+        contentHtml = `
+          <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="flex flex-wrap justify-between items-center gap-3 border-b pb-3">
+              <div>
+                <h3 class="font-bold text-slate-800 text-base">Input Kolektif Warga Belajar & Tutor (Paste Excel / CSV)</h3>
+                <p class="text-xs text-slate-500">Salin baris dari Excel atau unduh template CSV resmi (Password otomatis diset 123456).</p>
+              </div>
+              <div class="inline-flex rounded-lg bg-slate-100 p-1 border">
+                <button type="button" onclick="kolektifType='SISWA';renderApp();" class="px-3 py-1.5 rounded-md text-xs font-bold ${kolektifType === "SISWA" ? "bg-blue-600 text-white" : "text-slate-600"}">Kolektif Warga Belajar</button>
+                <button type="button" onclick="kolektifType='GURU';renderApp();" class="px-3 py-1.5 rounded-md text-xs font-bold ${kolektifType === "GURU" ? "bg-emerald-600 text-white" : "text-slate-600"}">Kolektif Tutor / Pamong</button>
+              </div>
+            </div>
+            ${
+              kolektifType === "SISWA"
+                ? `
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <label class="font-bold block mb-1">Rombel Tujuan Penempatan:</label>
+                      <select id="kol-rombel" class="w-full border rounded-lg px-3 py-2 font-bold bg-blue-50/40">
+                        ${appData.rombels.map((r) => `<option value="${r.id}">${escapeHtml(r.namaRombel)}</option>`).join("")}
+                      </select>
+                    </div>
+                    <div class="flex items-end">
+                      <button type="button" onclick="downloadTemplateCsvSiswa()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg flex items-center gap-1.5"><i data-lucide="download" class="w-4 h-4"></i> Download Template CSV Siswa (16 Biodata)</button>
+                    </div>
+                  </div>
+                  <div class="text-xs space-y-2">
+                    <label class="font-bold block text-slate-700">Paste Data dari Excel / CSV (Pisahkan kolom dengan Tab atau Titik Koma <code>;</code>):</label>
+                    <p class="text-[11px] text-slate-500">Format urutan kolom: <code>Nama Lengkap ; NIS ; NISN ; Tempat Tgl Lahir ; Laki-laki/Perempuan ; Agama ; Status Keluarga ; Anak Ke ; Alamat ; Telepon ; Sekolah Asal ; Diterima Kelas ; Tgl Diterima ; Nama Ayah ; Nama Ibu ; Alamat Ortu ; Pekerjaan Ayah ; Pekerjaan Ibu ; Nama Wali ; Pekerjaan Wali</code></p>
+                    <textarea id="kol-paste-siswa" rows="6" class="w-full border border-slate-300 rounded-xl p-3 font-mono text-xs" placeholder="Contoh:&#10;Budi Santoso;20261011;0091234567;Tuban, 12 Maret 2008;Laki-laki;Islam;Anak Kandung;1;Ds. Plumpang, Tuban;085711223344;SMPN 1 Plumpang;Fase E (Kelas 10);14 Juli 2025;Bpk. Joko;Ibu Siti;Ds. Plumpang, Tuban;Petani;IRT;-;-"></textarea>
+                    <button type="button" onclick="processKolektifSiswa()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg flex items-center gap-1.5"><i data-lucide="clipboard-paste" class="w-4 h-4"></i> Proses & Simpan Kolektif Warga Belajar</button>
+                  </div>
+                `
+                : `
+                  <div class="text-xs space-y-3">
+                    <p class="text-[11px] text-slate-500">Format urutan kolom (Tab atau Titik Koma <code>;</code>): <code>Nama Lengkap & Gelar ; Username Login ; NUPTK/NIP ; Role (TUTOR atau WALI_KELAS)</code></p>
+                    <textarea id="kol-paste-guru" rows="6" class="w-full border border-slate-300 rounded-xl p-3 font-mono text-xs" placeholder="Contoh:&#10;Ahmad Fauzi, S.Pd.;tutor.mtk;5544332211009988;TUTOR&#10;Dewi Kartika, M.Pd.;tutor.ipa;6655443322110077;WALI_KELAS"></textarea>
+                    <button type="button" onclick="processKolektifGuru()" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg flex items-center gap-1.5"><i data-lucide="user-plus" class="w-4 h-4"></i> Proses & Simpan Kolektif Tutor</button>
+                  </div>
+                `
+            }
+          </div>
+        `;
+      } else if (masterSubTab === "akun") {
+        contentHtml = `
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <form onsubmit="handleAddUser(event)" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3 text-xs h-fit">
+              <h3 class="font-bold text-slate-800 text-sm border-b pb-2">Tambah Akun Tutor / Wali Kelas</h3>
+              <div><label class="font-bold block mb-1">Nama Lengkap & Gelar</label><input type="text" id="usr-nama" required class="w-full border rounded-lg px-3 py-2" /></div>
+              <div><label class="font-bold block mb-1">Username Login</label><input type="text" id="usr-user" required class="w-full border rounded-lg px-3 py-2" /></div>
+              <div><label class="font-bold block mb-1">Password Awal</label><input type="text" id="usr-pass" required value="123456" class="w-full border rounded-lg px-3 py-2" /></div>
+              <div><label class="font-bold block mb-1">Role / Hak Akses</label>
+                <select id="usr-role" class="w-full border rounded-lg px-2 py-2"><option value="TUTOR">Tutor (Pendidik)</option><option value="WALI_KELAS">Wali Kelas / Pamong Belajar</option><option value="ADMIN">Admin / Operator</option></select>
+              </div>
+              <button type="submit" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg">+ Buat Akun Pengguna</button>
+            </form>
+            <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+              <div class="p-4 border-b font-bold text-sm text-slate-800">Manajemen Username & Password Akun Pengguna</div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs text-left">
+                  <thead class="bg-slate-50 border-b"><tr><th class="p-3">Nama Pengguna</th><th class="p-3">Username</th><th class="p-3">Role</th><th class="p-3">Password Saat Ini</th><th class="p-3">Ubah Password Baru</th></tr></thead>
+                  <tbody class="divide-y">
+                    ${appData.users.map((u) => `
+                      <tr>
+                        <td class="p-3 font-bold">${escapeHtml(u.nama)}</td>
+                        <td class="p-3"><input type="text" value="${escapeHtml(u.username)}" oninput="updateUsernameAdmin('${u.id}', this.value)" class="border border-slate-300 rounded px-2 py-1 w-36 font-semibold text-blue-900 bg-blue-50/40" /></td>
+                        <td class="p-3">${escapeHtml(u.role)}</td>
+                        <td class="p-3 text-slate-600">${escapeHtml(u.password)}</td>
+                        <td class="p-3 flex gap-1.5">
+                          <input type="text" id="newpass-${u.id}" placeholder="Password baru..." class="border rounded px-2 py-1 w-28" />
+                          <button type="button" onclick="updateUserPasswordAdmin('${u.id}')" class="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded">Simpan</button>
+                        </td>
+                      </tr>
+                    `).join("")}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (masterSubTab === "cetak") {
+        const pc = appData.printConfig;
+        contentHtml = `
+          <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-5 max-w-3xl">
+            <div class="border-b pb-3"><h3 class="font-bold text-slate-800 text-base">Pengaturan Kertas, Margin, Skala & Posisi Tanda Tangan Rapor</h3></div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+              <div><label class="font-bold block mb-1">Ukuran Kertas</label>
+                <select id="pc-paper" class="w-full border rounded-lg px-3 py-2 font-bold">
+                  <option value="F4" ${pc.paperSize === "F4" ? "selected" : ""}>F4 / Folio (215mm × 330mm)</option>
+                  <option value="A4" ${pc.paperSize === "A4" ? "selected" : ""}>A4 (210mm × 297mm)</option>
+                </select>
+              </div>
+              <div><label class="font-bold block mb-1">Skala Cetak (%)</label><input type="number" id="pc-scale" min="70" max="120" value="${pc.scalePercent}" class="w-full border rounded-lg px-3 py-2 font-bold" /></div>
+              <div><label class="font-bold block mb-1">Posisi Tanda Tangan</label>
+                <select id="pc-sig" class="w-full border rounded-lg px-3 py-2 font-bold">
+                  <option value="3_KOLOM" ${pc.signatureLayout === "3_KOLOM" ? "selected" : ""}>Model Piramida Resmi</option>
+                  <option value="SEJAJAR" ${pc.signatureLayout === "SEJAJAR" ? "selected" : ""}>Model 3 Kolom Sejajar</option>
+                </select>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+              <div><label class="font-bold block mb-1">Margin Atas (mm)</label><input type="number" id="pc-mt" value="${pc.marginTop}" class="w-full border rounded-lg px-3 py-2" /></div>
+              <div><label class="font-bold block mb-1">Margin Bawah (mm)</label><input type="number" id="pc-mb" value="${pc.marginBottom}" class="w-full border rounded-lg px-3 py-2" /></div>
+              <div><label class="font-bold block mb-1">Margin Kiri (mm)</label><input type="number" id="pc-ml" value="${pc.marginLeft}" class="w-full border rounded-lg px-3 py-2" /></div>
+              <div><label class="font-bold block mb-1">Margin Kanan (mm)</label><input type="number" id="pc-mr" value="${pc.marginRight}" class="w-full border rounded-lg px-3 py-2" /></div>
+            </div>
+            <button onclick="savePrintConfig()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-2"><i data-lucide="save" class="w-4 h-4"></i> Simpan Pengaturan Cetak</button>
+          </div>
+        `;
+      } else if (masterSubTab === "backup") {
+        contentHtml = `
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+              <div class="flex items-center gap-3 border-b pb-3">
+                <div class="p-2.5 bg-blue-50 text-blue-700 rounded-xl"><i data-lucide="hard-drive-download" class="w-6 h-6"></i></div>
+                <div>
+                  <h3 class="font-bold text-slate-800 text-base">Backup Data e-Rapor</h3>
+                  <p class="text-xs text-slate-500">Unduh seluruh cadangan data aplikasi ke file JSON.</p>
+                </div>
+              </div>
+              <div class="bg-slate-50 p-3.5 rounded-xl border text-xs space-y-1 text-slate-600">
+                <p>• <strong>Satuan Pendidikan:</strong> ${escapeHtml(appData.profil.namaSatuan)}</p>
+                <p>• <strong>Total Data:</strong> ${appData.rombels.length} Rombel, ${appData.mapels.length} Mapel, ${appData.siswas.length} Warga Belajar</p>
+              </div>
+              <button type="button" onclick="downloadBackupJson()" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-sm"><i data-lucide="hard-drive-download" class="w-4 h-4"></i> Download File Backup Sekarang (.json)</button>
+            </div>
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+              <div class="flex items-center gap-3 border-b pb-3">
+                <div class="p-2.5 bg-emerald-50 text-emerald-700 rounded-xl"><i data-lucide="hard-drive-upload" class="w-6 h-6"></i></div>
+                <div>
+                  <h3 class="font-bold text-slate-800 text-base">Restore Data dari Backup</h3>
+                  <p class="text-xs text-slate-500">Pulihkan seluruh data e-Rapor dari file cadangan (.json).</p>
+                </div>
+              </div>
+              <div class="bg-amber-50 p-3.5 rounded-xl border border-amber-200 text-xs text-amber-900">
+                <strong>Perhatian:</strong> Proses Restore akan menggantikan data aktif saat ini dengan data dari file backup.
+              </div>
+              <label class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-sm cursor-pointer">
+                <i data-lucide="hard-drive-upload" class="w-4 h-4"></i> Pilih File Backup (.json) & Pulihkan Data
+                <input type="file" accept=".json,application/json" onchange="handleRestoreJson(event)" class="hidden" />
+              </label>
+            </div>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="space-y-4">
+          <div class="flex flex-wrap gap-2 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
+            ${subTabs.map((t) => `
+              <button onclick="masterSubTab='${t.id}';renderApp();" class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition ${masterSubTab === t.id ? "bg-blue-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}">
+                <i data-lucide="${t.icon}" class="w-3.5 h-3.5"></i> ${t.label}
+              </button>
+            `).join("")}
+          </div>
+          ${contentHtml}
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 7. MODUL PENILAIAN TUTOR (ADAPTIF MERDEKA VS K-13)
+    // =========================================================================
+
+    function renderPenilaianTutorModule() {
+      const activeRombel = appData.rombels.find((r) => r.id === penilaianRombelId) || appData.rombels[0];
+      const tKey = `${activeRombel.program}::${activeRombel.faseTingkatan}`;
+      const mappedIds = appData.tingkatanMapelMapping[tKey] || appData.mapels.map((m) => m.id);
+      const availableMapels = mappedIds
+        .map((id) => appData.mapels.find((m) => m.id === id))
+        .filter((m) => m && m.isActive !== false);
+      const finalMapels = availableMapels.length > 0 ? availableMapels : appData.mapels.filter((m) => m.isActive !== false);
+
+      if (!finalMapels.some((m) => m.id === penilaianMapelId) && finalMapels[0]) {
+        penilaianMapelId = finalMapels[0].id;
+      }
+      const activeMapel = finalMapels.find((m) => m.id === penilaianMapelId) || finalMapels[0];
+      const activeTps = (activeMapel?.tps || []).filter((tp) => tp.isActive !== false);
+      const isMerdeka = activeRombel.kurikulum === "MERDEKA";
+      const members = appData.siswas.filter((s) => s.rombelId === activeRombel.id && s.isActive !== false);
+      const intervalK13 = getIntervalInfoK13(activeMapel.kkm);
+
+      return `
+        <div class="space-y-5">
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-600 uppercase mb-1">1. Pilih Rombongan Belajar (Otomatis Deteksi Kurikulum)</label>
+              <select onchange="penilaianRombelId=this.value;renderApp();" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50">
+                ${appData.rombels.map((r) => `<option value="${r.id}" ${r.id === activeRombel.id ? "selected" : ""}>${escapeHtml(r.namaRombel)} — [${r.kurikulum}]</option>`).join("")}
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-600 uppercase mb-1">2. Pilih Mata Pelajaran</label>
+              <select onchange="penilaianMapelId=this.value;renderApp();" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50">
+                ${finalMapels.map((m) => `<option value="${m.id}" ${m.id === activeMapel.id ? "selected" : ""}>${escapeHtml(m.nama)} (${m.kelompok})</option>`).join("")}
+              </select>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+            <div class="flex flex-wrap justify-between items-center gap-2 border-b pb-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-extrabold ${isMerdeka ? "bg-indigo-100 text-indigo-800" : "bg-amber-100 text-amber-800"}">${isMerdeka ? "MODE KURIKULUM MERDEKA" : "MODE KURIKULUM 2013 (K-13)"}</span>
+                  <span class="text-xs font-semibold text-slate-500">Kelas ${activeRombel.tingkatKelas} • Semester ${escapeHtml(appData.profil.semester)}</span>
+                </div>
+                <h3 class="font-bold text-slate-800 text-sm mt-1">${isMerdeka ? `Daftar Tujuan Pembelajaran (TP) — ${escapeHtml(activeMapel.nama)}` : `Daftar Kompetensi Dasar (KD) & KKM ${activeMapel.kkm} — ${escapeHtml(activeMapel.nama)}`}</h3>
+              </div>
+              <button type="button" onclick="handleGenerateTpOrKd()" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-sm">
+                <i data-lucide="wand-2" class="w-4 h-4"></i> ${isMerdeka ? `Generate TP Otomatis (Kls ${activeRombel.tingkatKelas})` : `Generate KD Otomatis (Kls ${activeRombel.tingkatKelas})`}
+              </button>
+            </div>
+
+            ${
+              isMerdeka
+                ? `
+                  <div class="space-y-2 text-xs">
+                    ${activeMapel.tps.map((tp) => {
+                      const tpAct = tp.isActive !== false;
+                      return `
+                        <div class="p-2.5 border rounded-lg flex flex-wrap sm:flex-nowrap justify-between items-center gap-3 ${tpAct ? "bg-slate-50" : "bg-slate-100/70 opacity-75"}">
+                          <div class="flex items-start gap-2 flex-1"><span class="font-extrabold text-indigo-700 shrink-0">${escapeHtml(tp.kode)}:</span><span>${escapeHtml(tp.deskripsi)}</span></div>
+                          <div class="inline-flex items-center gap-1 shrink-0">
+                            <button type="button" onclick="toggleTpStatus('${activeMapel.id}','${tp.id}',true)" class="px-2 py-1 rounded text-[10px] font-bold border ${tpAct ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-emerald-700 border-emerald-300"}">Aktif</button>
+                            <button type="button" onclick="toggleTpStatus('${activeMapel.id}','${tp.id}',false)" class="px-2 py-1 rounded text-[10px] font-bold border ${!tpAct ? "bg-amber-600 text-white border-amber-600" : "bg-white text-amber-700 border-amber-300"}">Tidak Aktif</button>
+                            <button type="button" onclick="deleteTp('${activeMapel.id}','${tp.id}')" class="px-2 py-1 rounded text-[10px] font-bold bg-red-50 text-red-700 border border-red-200 hover:bg-red-100">Hapus</button>
+                          </div>
+                        </div>
+                      `;
+                    }).join("")}
+                    <form onsubmit="handleAddManualTp(event)" class="flex flex-wrap gap-2 pt-2">
+                      <input type="text" id="new-tp-code" placeholder="Kode (TP.3)" class="border rounded-lg px-2.5 py-1.5 w-28" />
+                      <input type="text" id="new-tp-desc" required placeholder="Tambah deskripsi Tujuan Pembelajaran baru..." class="border rounded-lg px-3 py-1.5 flex-1 min-w-[220px]" />
+                      <button type="submit" class="px-3 py-1.5 bg-slate-800 text-white font-bold rounded-lg">+ Tambah TP</button>
+                    </form>
+                  </div>
+                `
+                : `
+                  <div class="text-xs space-y-2">
+                    <p class="text-slate-600 bg-amber-50 p-2 rounded border border-amber-200"><strong>Interval Predikat KKM ${activeMapel.kkm}:</strong> A (${intervalK13.A}) • B (${intervalK13.B}) • C (${intervalK13.C}) • D (${intervalK13.D})</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      ${activeMapel.kds.map((kd) => `<div class="p-2.5 bg-slate-50 border rounded-lg flex gap-2"><span class="font-extrabold text-amber-800 shrink-0">[${kd.aspek.slice(0, 4)} ${escapeHtml(kd.kode)}]</span><span>${escapeHtml(kd.deskripsi)}</span></div>`).join("")}
+                    </div>
+                  </div>
+                `
+            }
+          </div>
+
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-4 bg-slate-50 border-b flex flex-wrap justify-between items-center gap-2">
+              <span class="font-bold text-slate-800 text-xs">Daftar Nilai Warga Belajar (${members.length} Peserta)</span>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" onclick="handleGenerateNilaiOtomatisAll()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-sm"><i data-lucide="sparkles" class="w-4 h-4"></i> Generate Nilai & Deskripsi Otomatis (Semua Siswa)</button>
+                <button type="button" onclick="saveAppState();showToast('Seluruh perubahan nilai berhasil disimpan!');" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5"><i data-lucide="save" class="w-4 h-4"></i> Simpan Nilai</button>
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              ${
+                isMerdeka
+                  ? `
+                    <table class="w-full text-xs text-left">
+                      <thead class="bg-slate-100 border-b text-slate-700">
+                        <tr>
+                          <th class="p-3 w-8">No</th>
+                          <th class="p-3 min-w-[170px]">Nama Warga Belajar</th>
+                          ${activeTps.map((tp) => `<th class="p-3 w-20 text-center" title="${escapeHtml(tp.deskripsi)}">${escapeHtml(tp.kode)}</th>`).join("")}
+                          <th class="p-3 w-24 text-center bg-blue-50">Nilai Akhir</th>
+                          <th class="p-3 min-w-[320px]">Capaian Kompetensi</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y">
+                        ${members.map((s, idx) => {
+                          const rec = appData.nilaiMap[s.id]?.[activeMapel.id] || { tpScores: {}, nilaiAkhirMerdeka: 80, deskripsiMerdeka: "" };
+                          return `
+                            <tr class="hover:bg-slate-50">
+                              <td class="p-3">${idx + 1}</td>
+                              <td class="p-3"><div class="font-bold text-slate-800">${escapeHtml(s.nama)}</div><div class="text-[11px] text-slate-400">NIS: ${escapeHtml(s.nis)}</div></td>
+                              ${activeTps.map((tp) => `
+                                <td class="p-2 text-center"><input type="number" min="0" max="100" value="${rec.tpScores?.[tp.id] ?? 80}" oninput="updateTpScore('${s.id}','${activeMapel.id}','${tp.id}',this.value, false)" onchange="updateTpScore('${s.id}','${activeMapel.id}','${tp.id}',this.value, true)" class="w-16 text-center border rounded py-1" /></td>
+                              `).join("")}
+                              <td class="p-2 text-center bg-blue-50/40"><input id="merdeka-final-${s.id}-${activeMapel.id}" type="number" min="0" max="100" value="${rec.nilaiAkhirMerdeka ?? 80}" oninput="updateMerdekaFinal('${s.id}','${activeMapel.id}',this.value)" class="w-16 text-center font-semibold text-blue-700 border border-blue-300 rounded py-1" /></td>
+                              <td class="p-2"><textarea id="merdeka-desc-${s.id}-${activeMapel.id}" rows="2" oninput="updateMerdekaDesc('${s.id}','${activeMapel.id}',this.value)" class="w-full border rounded p-1.5 text-xs">${escapeHtml(rec.deskripsiMerdeka || "")}</textarea></td>
+                            </tr>
+                          `;
+                        }).join("")}
+                      </tbody>
+                    </table>
+                  `
+                  : `
+                    <table class="w-full text-xs text-left">
+                      <thead class="bg-slate-100 border-b text-slate-700">
+                        <tr>
+                          <th class="p-3 w-8">No</th>
+                          <th class="p-3 min-w-[150px]">Nama Warga Belajar</th>
+                          <th class="p-3 w-20 text-center bg-blue-50">KI-3 (Peng)</th>
+                          <th class="p-3 w-14 text-center bg-blue-50">Pred</th>
+                          <th class="p-3 min-w-[220px] bg-blue-50">Deskripsi Pengetahuan</th>
+                          <th class="p-3 w-20 text-center bg-emerald-50">KI-4 (Ket)</th>
+                          <th class="p-3 w-14 text-center bg-emerald-50">Pred</th>
+                          <th class="p-3 min-w-[220px] bg-emerald-50">Deskripsi Keterampilan</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y">
+                        ${members.map((s, idx) => {
+                          const rec = appData.nilaiMap[s.id]?.[activeMapel.id] || { nilaiPengetahuan: 78, predikatPengetahuan: "C", deskripsiPengetahuan: "", nilaiKeterampilan: 80, predikatKeterampilan: "B", deskripsiKeterampilan: "" };
+                          return `
+                            <tr>
+                              <td class="p-3">${idx + 1}</td>
+                              <td class="p-3 font-bold text-slate-800">${escapeHtml(s.nama)}</td>
+                              <td class="p-2 text-center bg-blue-50/30"><input type="number" min="0" max="100" value="${rec.nilaiPengetahuan}" oninput="updateK13Score('${s.id}','${activeMapel.id}','PENGETAHUAN',this.value, false)" onchange="updateK13Score('${s.id}','${activeMapel.id}','PENGETAHUAN',this.value, true)" class="w-16 text-center border rounded py-1 font-bold" /></td>
+                              <td id="k13-pred-p-${s.id}-${activeMapel.id}" class="p-2 text-center font-extrabold bg-blue-50/30">${rec.predikatPengetahuan}</td>
+                              <td class="p-2 bg-blue-50/30"><textarea id="k13-desc-p-${s.id}-${activeMapel.id}" rows="2" oninput="updateK13Desc('${s.id}','${activeMapel.id}','PENGETAHUAN',this.value)" class="w-full border rounded p-1 text-xs">${escapeHtml(rec.deskripsiPengetahuan)}</textarea></td>
+                              <td class="p-2 text-center bg-emerald-50/30"><input type="number" min="0" max="100" value="${rec.nilaiKeterampilan}" oninput="updateK13Score('${s.id}','${activeMapel.id}','KETERAMPILAN',this.value, false)" onchange="updateK13Score('${s.id}','${activeMapel.id}','KETERAMPILAN',this.value, true)" class="w-16 text-center border rounded py-1 font-bold" /></td>
+                              <td id="k13-pred-k-${s.id}-${activeMapel.id}" class="p-2 text-center font-extrabold bg-emerald-50/30">${rec.predikatKeterampilan}</td>
+                              <td class="p-2 bg-emerald-50/30"><textarea id="k13-desc-k-${s.id}-${activeMapel.id}" rows="2" oninput="updateK13Desc('${s.id}','${activeMapel.id}','KETERAMPILAN',this.value)" class="w-full border rounded p-1 text-xs">${escapeHtml(rec.deskripsiKeterampilan)}</textarea></td>
+                            </tr>
+                          `;
+                        }).join("")}
+                      </tbody>
+                    </table>
+                  `
+              }
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 8. MODUL PENILAIAN P5 & SIKAP
+    // =========================================================================
+
+    function renderPenilaianP5SikapModule() {
+      const activeRombel = appData.rombels.find((r) => r.id === p5RombelId) || appData.rombels[0];
+      const isMerdeka = activeRombel.kurikulum === "MERDEKA";
+      const members = appData.siswas.filter((s) => s.rombelId === activeRombel.id && s.isActive !== false);
+
+      return `
+        <div class="space-y-5">
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Pilih Rombongan Belajar</label>
+              <select onchange="p5RombelId=this.value;renderApp();" class="border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold bg-slate-50">
+                ${appData.rombels.map((r) => `<option value="${r.id}" ${r.id === activeRombel.id ? "selected" : ""}>${escapeHtml(r.namaRombel)} — [${r.kurikulum}]</option>`).join("")}
+              </select>
+            </div>
+            <button onclick="saveAppState();showToast('Data penilaian P5 / Sikap berhasil disimpan!');" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5"><i data-lucide="save" class="w-4 h-4"></i> Simpan Semua Perubahan</button>
+          </div>
+          ${
+            isMerdeka
+              ? `<div class="space-y-4">
+                  ${members.map((s) => `
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3 text-xs">
+                      <div class="flex justify-between items-center border-b pb-2">
+                        <h4 class="font-bold text-sm text-slate-800">${escapeHtml(s.nama)} <span class="text-slate-400 font-normal">(NIS: ${escapeHtml(s.nis)})</span></h4>
+                        <span class="px-2.5 py-0.5 bg-indigo-100 text-indigo-800 font-bold rounded">Kokurikuler / P5</span>
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div><label class="font-bold block mb-1">Judul Kokurikuler / Projek</label><input type="text" value="${escapeHtml(s.p5.judul)}" oninput="updateSiswaField('${s.id}','p5.judul',this.value)" class="w-full border rounded-lg px-3 py-2" /></div>
+                        <div><label class="font-bold block mb-1">Dimensi & Subdimensi Utama</label><input type="text" value="${escapeHtml(s.p5.elemen || "")}" oninput="updateSiswaField('${s.id}','p5.elemen',this.value)" class="w-full border rounded-lg px-3 py-2" /></div>
+                      </div>
+                      <div><label class="font-bold block mb-1">Catatan Proses & Capaian Kokurikuler</label><textarea rows="2" oninput="updateSiswaField('${s.id}','p5.catatanProses',this.value)" class="w-full border rounded-lg p-2">${escapeHtml(s.p5.catatanProses)}</textarea></div>
+                    </div>
+                  `).join("")}
+                </div>`
+              : `<div class="space-y-4">
+                  ${members.map((s) => `
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3 text-xs">
+                      <div class="flex flex-wrap justify-between items-center gap-2 border-b pb-2">
+                        <h4 class="font-bold text-sm text-slate-800">${escapeHtml(s.nama)}</h4>
+                        <button type="button" onclick="autoGenerateSikap('${s.id}', ${activeRombel.tingkatKelas})" class="px-3 py-1.5 bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 rounded-lg font-bold flex items-center gap-1.5"><i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Generator AI Sikap (Kelas ${activeRombel.tingkatKelas})</button>
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                          <div class="flex justify-between items-center">
+                            <label class="font-bold">1. Sikap Spiritual (KI-1)</label>
+                            <select onchange="updateSiswaField('${s.id}','sikapSpiritual.predikat',this.value)" class="border rounded px-2 py-1 font-bold">
+                              <option value="Sangat Baik" ${s.sikapSpiritual.predikat === "Sangat Baik" ? "selected" : ""}>Sangat Baik</option>
+                              <option value="Baik" ${s.sikapSpiritual.predikat === "Baik" ? "selected" : ""}>Baik</option>
+                              <option value="Cukup" ${s.sikapSpiritual.predikat === "Cukup" ? "selected" : ""}>Cukup</option>
+                            </select>
+                          </div>
+                          <textarea rows="2" oninput="updateSiswaField('${s.id}','sikapSpiritual.deskripsi',this.value)" class="w-full border rounded-lg p-2">${escapeHtml(s.sikapSpiritual.deskripsi)}</textarea>
+                        </div>
+                        <div class="space-y-2">
+                          <div class="flex justify-between items-center">
+                            <label class="font-bold">2. Sikap Sosial (KI-2)</label>
+                            <select onchange="updateSiswaField('${s.id}','sikapSosial.predikat',this.value)" class="border rounded px-2 py-1 font-bold">
+                              <option value="Sangat Baik" ${s.sikapSosial.predikat === "Sangat Baik" ? "selected" : ""}>Sangat Baik</option>
+                              <option value="Baik" ${s.sikapSosial.predikat === "Baik" ? "selected" : ""}>Baik</option>
+                              <option value="Cukup" ${s.sikapSosial.predikat === "Cukup" ? "selected" : ""}>Cukup</option>
+                            </select>
+                          </div>
+                          <textarea rows="2" oninput="updateSiswaField('${s.id}','sikapSosial.deskripsi',this.value)" class="w-full border rounded-lg p-2">${escapeHtml(s.sikapSosial.deskripsi)}</textarea>
+                        </div>
+                      </div>
+                    </div>
+                  `).join("")}
+                </div>`
+          }
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 9. MODUL WALI KELAS / PAMONG BELAJAR
+    // =========================================================================
+
+    function renderWaliKelasModule() {
+      const activeRombel = appData.rombels.find((r) => r.id === waliRombelId) || appData.rombels[0];
+      const members = appData.siswas.filter((s) => s.rombelId === activeRombel.id && s.isActive !== false);
+
+      return `
+        <div class="space-y-5">
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-600 uppercase mb-1">Pilih Rombel Binaan Wali Kelas / Pamong</label>
+              <select onchange="waliRombelId=this.value;renderApp();" class="border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold bg-slate-50">
+                ${appData.rombels.map((r) => `<option value="${r.id}" ${r.id === activeRombel.id ? "selected" : ""}>${escapeHtml(r.namaRombel)}</option>`).join("")}
+              </select>
+            </div>
+            <button onclick="saveAppState();showToast('Rekap absensi, catatan wali & keputusan kenaikan berhasil disimpan!');" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5"><i data-lucide="save" class="w-4 h-4"></i> Simpan Data Wali Kelas</button>
+          </div>
+          <div class="space-y-4">
+            ${members.map((s) => `
+              <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4 text-xs">
+                <div class="flex flex-wrap justify-between items-center gap-2 border-b pb-2">
+                  <div><h4 class="font-bold text-sm text-slate-800">${escapeHtml(s.nama)}</h4><p class="text-[11px] text-slate-500">NIS: ${escapeHtml(s.nis)}</p></div>
+                  <button type="button" onclick="autoGenerateCatatanWali('${s.id}','${activeRombel.id}')" class="px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 rounded-lg font-bold flex items-center gap-1.5"><i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Generator AI Catatan Wali (${escapeHtml(activeRombel.program)})</button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div class="space-y-2 bg-slate-50 p-3 rounded-lg border">
+                    <p class="font-bold text-slate-700">Rekap Ketidakhadiran</p>
+                    <div class="flex justify-between items-center"><span>Sakit (hari):</span><input type="number" min="0" value="${s.sakit}" oninput="updateSiswaField('${s.id}','sakit',Number(this.value))" class="w-16 border rounded px-2 py-1 text-center bg-white" /></div>
+                    <div class="flex justify-between items-center"><span>Izin (hari):</span><input type="number" min="0" value="${s.izin}" oninput="updateSiswaField('${s.id}','izin',Number(this.value))" class="w-16 border rounded px-2 py-1 text-center bg-white" /></div>
+                    <div class="flex justify-between items-center"><span>Tanpa Ket.:</span><input type="number" min="0" value="${s.alpa}" oninput="updateSiswaField('${s.id}','alpa',Number(this.value))" class="w-16 border rounded px-2 py-1 text-center bg-white" /></div>
+                  </div>
+                  <div class="md:col-span-2 space-y-1">
+                    <label class="font-bold text-slate-700 block">Catatan Wali Kelas / Pamong</label>
+                    <textarea rows="4" oninput="updateSiswaField('${s.id}','catatanWali',this.value)" class="w-full border rounded-lg p-2.5">${escapeHtml(s.catatanWali)}</textarea>
+                  </div>
+                  <div class="space-y-2">
+                    <label class="font-bold text-slate-700 block">Keterangan Kenaikan / Kelulusan</label>
+                    <input type="text" value="${escapeHtml(s.keputusan)}" oninput="updateSiswaField('${s.id}','keputusan',this.value)" class="w-full border rounded-lg px-3 py-2 font-bold text-emerald-800 bg-emerald-50/50" />
+                  </div>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 10. MODUL CETAK & PREVIEW RAPOR (INDIVIDU & KOLEKTIF F4/A4)
+    // =========================================================================
+
+    function renderTandaTanganHtml(targetWali) {
+      const p = appData.profil;
+      if (appData.printConfig.signatureLayout === "SEJAJAR") {
+        return `
+          <div class="grid grid-cols-3 text-[9.5pt] text-center mt-5 pt-2">
+            <div><p>Mengetahui,</p><p>Orang Tua / Wali</p><div class="h-14"></div><p class="font-bold underline">........................................</p></div>
+            <div><p>Mengetahui,</p><p>Kepala Satuan Pendidikan</p><div class="h-14"></div><p class="font-bold underline">${escapeHtml(p.namaKepala)}</p><p class="text-[8.5pt]">NIP/NUPTK. ${escapeHtml(p.nipKepala || "-")}</p></div>
+            <div><p>${escapeHtml(p.tanggalRapor)}</p><p>Wali Kelas / Pamong Belajar</p><div class="h-14"></div><p class="font-bold underline">${escapeHtml(targetWali?.nama || "-")}</p><p class="text-[8.5pt]">NUPTK. ${escapeHtml(targetWali?.nuptk || "-")}</p></div>
+          </div>
+        `;
+      }
+      return `
+        <div class="text-[9.5pt] mt-4">
+          <div class="grid grid-cols-2 text-center">
+            <div><p>Mengetahui,</p><p>Orang Tua / Wali</p><div class="h-14"></div><p class="font-bold underline">........................................</p></div>
+            <div><p>${escapeHtml(p.tanggalRapor)}</p><p>Wali Kelas / Pamong Belajar</p><div class="h-14"></div><p class="font-bold underline">${escapeHtml(targetWali?.nama || "-")}</p><p class="text-[8.5pt]">NUPTK. ${escapeHtml(targetWali?.nuptk || "-")}</p></div>
+          </div>
+          <div class="text-center mt-3">
+            <p>Mengetahui,</p><p>Kepala ${escapeHtml(p.namaSatuan)}</p><div class="h-14"></div><p class="font-bold underline">${escapeHtml(p.namaKepala)}</p><p class="text-[8.5pt]">NIP/NUPTK. ${escapeHtml(p.nipKepala || "-")}</p>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderCetakRaporModule() {
+      const p = appData.profil;
+      const pc = appData.printConfig;
+      const activeSiswas = appData.siswas.filter((s) => s.isActive !== false);
+      const activeSid = currentUser.role === "WARGA_BELAJAR" ? currentUser.id : cetakSiswaId;
+      const siswa = activeSiswas.find((s) => s.id === activeSid) || activeSiswas[0] || appData.siswas[0];
+      const rombel = appData.rombels.find((r) => r.id === siswa.rombelId) || appData.rombels[0];
+
+      const studentsToPrint =
+        currentUser.role !== "WARGA_BELAJAR" && cetakMode === "KOLEKTIF"
+          ? activeSiswas.filter((s) => s.rombelId === cetakRombelId).length > 0
+            ? activeSiswas.filter((s) => s.rombelId === cetakRombelId)
+            : [siswa]
+          : [siswa];
+
+      return `
+        <div class="space-y-5">
+          <div class="no-print bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="flex flex-wrap justify-between items-center gap-4 border-b pb-4">
+              <div class="flex flex-wrap items-center gap-3">
+                ${
+                  currentUser.role !== "WARGA_BELAJAR"
+                    ? `
+                      <div>
+                        <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Mode Cetak Rapor</label>
+                        <div class="inline-flex rounded-lg bg-slate-100 p-1 border border-slate-200">
+                          <button type="button" onclick="cetakMode='INDIVIDU';renderApp();" class="px-3 py-1.5 rounded-md text-xs font-bold ${cetakMode === "INDIVIDU" ? "bg-blue-600 text-white shadow-sm" : "text-slate-600"}">Cetak Individu</button>
+                          <button type="button" onclick="cetakMode='KOLEKTIF';renderApp();" class="px-3 py-1.5 rounded-md text-xs font-bold ${cetakMode === "KOLEKTIF" ? "bg-emerald-600 text-white shadow-sm" : "text-slate-600"}">Cetak / Simpan Kolektif</button>
+                        </div>
+                      </div>
+                    `
+                    : ""
+                }
+                ${
+                  currentUser.role !== "WARGA_BELAJAR" && cetakMode === "INDIVIDU"
+                    ? `
+                      <div>
+                        <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Pilih Warga Belajar</label>
+                        <select onchange="cetakSiswaId=this.value;renderApp();" class="border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold bg-slate-50">
+                          ${activeSiswas.map((s) => `<option value="${s.id}" ${s.id === siswa.id ? "selected" : ""}>${escapeHtml(s.nama)} — (${escapeHtml(appData.rombels.find((r) => r.id === s.rombelId)?.namaRombel || "")})</option>`).join("")}
+                        </select>
+                      </div>
+                    `
+                    : ""
+                }
+                ${
+                  currentUser.role !== "WARGA_BELAJAR" && cetakMode === "KOLEKTIF"
+                    ? `
+                      <div>
+                        <label class="block text-[11px] font-bold text-emerald-700 uppercase mb-1">Pilih Rombel Kolektif (${studentsToPrint.length} Siswa)</label>
+                        <select onchange="cetakRombelId=this.value;renderApp();" class="border border-emerald-300 rounded-lg px-3 py-2 text-xs font-bold bg-emerald-50/60 text-emerald-950">
+                          ${appData.rombels.map((rb) => `<option value="${rb.id}" ${rb.id === cetakRombelId ? "selected" : ""}>${escapeHtml(rb.namaRombel)} (${activeSiswas.filter((s) => s.rombelId === rb.id).length} WB)</option>`).join("")}
+                        </select>
+                      </div>
+                    `
+                    : ""
+                }
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1">Kertas & Skala</label>
+                  <div class="flex items-center gap-2">
+                    <select onchange="appData.printConfig.paperSize=this.value;updateDynamicPrintStyle();saveAppState();renderApp();" class="border rounded-lg px-2.5 py-2 text-xs font-bold">
+                      <option value="F4" ${pc.paperSize === "F4" ? "selected" : ""}>F4 (215×330mm)</option>
+                      <option value="A4" ${pc.paperSize === "A4" ? "selected" : ""}>A4 (210×297mm)</option>
+                    </select>
+                    <input type="number" min="75" max="115" value="${pc.scalePercent}" onchange="appData.printConfig.scalePercent=Number(this.value);saveAppState();renderApp();" class="w-16 border rounded-lg px-2 py-2 text-xs font-bold text-center" />
+                    <span class="text-xs font-bold text-slate-500">%</span>
+                  </div>
+                </div>
+              </div>
+              <button type="button" onclick="window.print()" class="px-5 py-2.5 bg-[#0F2C59] hover:bg-blue-900 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-md">
+                <i data-lucide="printer" class="w-4 h-4"></i>
+                ${cetakMode === "KOLEKTIF" && currentUser.role !== "WARGA_BELAJAR" ? `Cetak / Simpan Kolektif (${studentsToPrint.length} Rapor - ${pc.paperSize})` : `Cetak / Simpan PDF (${pc.paperSize})`}
+              </button>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-5 text-xs">
+              <span class="font-bold text-slate-700">Pilihan Bagian Cetak:</span>
+              <label class="inline-flex items-center gap-2 cursor-pointer font-semibold"><input type="checkbox" ${printSampul ? "checked" : ""} onchange="printSampul=this.checked;renderApp();" class="w-4 h-4 accent-blue-600 rounded" /> Sampul Rapor</label>
+              <label class="inline-flex items-center gap-2 cursor-pointer font-semibold"><input type="checkbox" ${printIdentitas ? "checked" : ""} onchange="printIdentitas=this.checked;renderApp();" class="w-4 h-4 accent-blue-600 rounded" /> Identitas Peserta Didik</label>
+              <label class="inline-flex items-center gap-2 cursor-pointer font-semibold"><input type="checkbox" ${printNilaiRapor ? "checked" : ""} onchange="printNilaiRapor=this.checked;renderApp();" class="w-4 h-4 accent-blue-600 rounded" /> Laporan Hasil Belajar (Nilai Rapor)</label>
+            </div>
+
+            ${
+              printIdentitas
+                ? `
+                  <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+                    <div class="flex flex-wrap justify-between items-center gap-2">
+                      <span class="text-xs font-bold text-slate-700">Seleksi Baris Data pada Halaman Identitas Peserta Didik:</span>
+                      <div class="flex gap-2 text-[11px]">
+                        <button type="button" onclick="IDENTITAS_FIELD_OPTIONS.forEach(f=>selectedIdentitasFields[f.key]=true);renderApp();" class="px-2.5 py-1 bg-blue-100 text-blue-800 font-bold rounded">Centang Semua</button>
+                        <button type="button" onclick="IDENTITAS_FIELD_OPTIONS.forEach(f=>selectedIdentitasFields[f.key]=false);renderApp();" class="px-2.5 py-1 bg-slate-200 text-slate-700 font-bold rounded">Kosongkan</button>
+                      </div>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
+                      ${IDENTITAS_FIELD_OPTIONS.map((f) => `
+                        <label class="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded border border-slate-200 cursor-pointer">
+                          <input type="checkbox" ${selectedIdentitasFields[f.key] ? "checked" : ""} onchange="selectedIdentitasFields['${f.key}']=this.checked;renderApp();" class="accent-blue-600" />
+                          <span class="truncate font-medium text-slate-700">${escapeHtml(f.label)}</span>
+                        </label>
+                      `).join("")}
+                    </div>
+                  </div>
+                `
+                : ""
+            }
+          </div>
+
+          <!-- AREA DOKUMEN CETAK RAPOR -->
+          <div id="rapor-printable-area" class="print-sheet-wrapper rapor-times-font bg-white text-black mx-auto shadow-2xl border border-slate-300 p-8 md:p-10" style="width:${pc.paperSize === "F4" ? "215mm" : "210mm"};zoom:${pc.scalePercent}%;">
+            ${studentsToPrint
+              .map((targetSiswa, batchIndex) => {
+                const targetRombel = appData.rombels.find((r) => r.id === targetSiswa.rombelId) || rombel;
+                const targetWali = appData.users.find((u) => u.id === targetRombel.waliKelasId) || appData.users[1];
+                const targetIsMerdeka = targetRombel.kurikulum === "MERDEKA";
+                const tKey = `${targetRombel.program}::${targetRombel.faseTingkatan}`;
+                const mappedIds = appData.tingkatanMapelMapping[tKey] || appData.mapels.map((m) => m.id);
+                const orderedMapels = mappedIds
+                  .map((id) => appData.mapels.find((m) => m.id === id))
+                  .filter((m) => m && m.isActive !== false);
+                const targetMapels = orderedMapels.length > 0 ? orderedMapels : appData.mapels.filter((m) => m.isActive !== false);
+                const isLast = batchIndex === studentsToPrint.length - 1;
+
+                return `
+                  <div class="${!isLast ? "page-break mb-12 pb-8 border-b-4 border-double border-slate-400 print:border-none print:mb-0 print:pb-0" : ""}">
+                    ${
+                      studentsToPrint.length > 1
+                        ? `<div class="no-print mb-4 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] font-sans font-bold text-emerald-800 flex justify-between"><span>Dokumen Kolektif #${batchIndex + 1} dari ${studentsToPrint.length}: ${escapeHtml(targetSiswa.nama)} (${escapeHtml(targetSiswa.nis)})</span><span>${escapeHtml(targetRombel.namaRombel)}</span></div>`
+                        : ""
+                    }
+
+                    ${
+                      printSampul
+                        ? `
+                          <div class="flex flex-col items-center justify-between text-center min-h-[285mm] py-8 ${printIdentitas || printNilaiRapor ? "page-break" : ""}">
+                            <div class="space-y-2 mt-4">
+                              <h1 class="text-xl font-bold uppercase tracking-wider">LAPORAN HASIL BELAJAR</h1>
+                              <h2 class="text-lg font-bold uppercase">PENDIDIKAN KESETARAAN PROGRAM ${escapeHtml(targetRombel.program.toUpperCase())}</h2>
+                              <p class="text-sm font-semibold">${targetIsMerdeka ? "(KURIKULUM MERDEKA)" : "(KURIKULUM 2013)"}</p>
+                            </div>
+                            <div class="my-6 flex items-center justify-center">
+                              ${
+                                p.logoPkbmBase64
+                                  ? `<img src="${p.logoPkbmBase64}" alt="Logo Satuan Pendidikan" style="width:8cm;height:8cm;" class="object-contain" />`
+                                  : `<div style="width:8cm;height:8cm;" class="border-2 border-black rounded-full flex flex-col items-center justify-center p-4"><i data-lucide="book-open" class="w-24 h-24 text-black mb-2"></i><span class="text-xs font-bold uppercase tracking-widest">PKBM AR RAUDLOTUL MUNAWWAROH</span><span class="text-[10px]">PLUMPANG - TUBAN</span></div>`
+                              }
+                            </div>
+                            <div class="w-full max-w-md space-y-2">
+                              <p class="text-xs font-bold uppercase tracking-wider">Nama Peserta Didik :</p>
+                              <div class="border-2 border-black py-3 px-4 font-bold text-base uppercase tracking-wide">${escapeHtml(targetSiswa.nama)}</div>
+                              <p class="text-xs font-bold uppercase tracking-wider pt-2">NIS / NISN :</p>
+                              <div class="border border-black py-2 px-4 font-semibold text-sm">${escapeHtml(targetSiswa.nis)} / ${escapeHtml(targetSiswa.nisn || "-")}</div>
+                            </div>
+                            <div class="space-y-1 mb-4">
+                              <h3 class="text-base font-bold uppercase">${escapeHtml(p.namaSatuan)}</h3>
+                              <p class="text-xs">NPSN : ${escapeHtml(p.npsn)}</p>
+                              <p class="text-xs">${escapeHtml(p.alamat)}, Kec. ${escapeHtml(p.kecamatan)}, Kab. ${escapeHtml(p.kabupaten)}, ${escapeHtml(p.provinsi)}</p>
+                            </div>
+                          </div>
+                        `
+                        : ""
+                    }
+
+                    ${
+                      printIdentitas
+                        ? `
+                          <div class="min-h-[285mm] py-4 ${printNilaiRapor ? "page-break" : ""}">
+                            <h2 class="text-center font-bold text-sm uppercase tracking-wider mb-6">KETERANGAN TENTANG DIRI PESERTA DIDIK</h2>
+                            <table class="w-full text-[10pt] leading-relaxed">
+                              <tbody>
+                                ${selectedIdentitasFields.nama ? `<tr><td class="w-8 py-1">1.</td><td class="w-56 py-1">Nama Peserta Didik (Lengkap)</td><td class="w-4 py-1">:</td><td class="font-bold uppercase py-1">${escapeHtml(targetSiswa.nama)}</td></tr>` : ""}
+                                ${selectedIdentitasFields.nisNisn ? `<tr><td class="py-1">2.</td><td class="py-1">Nomor Induk / NISN</td><td class="py-1">:</td><td class="py-1">${escapeHtml(targetSiswa.nis)} / ${escapeHtml(targetSiswa.nisn || "-")}</td></tr>` : ""}
+                                ${selectedIdentitasFields.ttl ? `<tr><td class="py-1">3.</td><td class="py-1">Tempat, Tanggal Lahir</td><td class="py-1">:</td><td class="py-1">${escapeHtml(targetSiswa.ttl)}</td></tr>` : ""}
+                                ${selectedIdentitasFields.jk ? `<tr><td class="py-1">4.</td><td class="py-1">Jenis Kelamin</td><td class="py-1">:</td><td class="py-1">${escapeHtml(targetSiswa.jk)}</td></tr>` : ""}
+                                ${selectedIdentitasFields.agama ? `<tr><td class="py-1">5.</td><td class="py-1">Agama</td><td class="py-1">:</td><td class="py-1">${escapeHtml(targetSiswa.agama)}</td></tr>` : ""}
+                                ${selectedIdentitasFields.statusKeluarga ? `<tr><td class="py-1">6.</td><td class="py-1">Status dalam Keluarga</td><td class="py-1">:</td><td class="py-1">${escapeHtml(targetSiswa.statusKeluarga || "Anak Kandung")}</td></tr>` : ""}
+                                ${selectedIdentitasFields.anakKe ? `<tr><td class="py-1">7.</td><td class="py-1">Anak ke-</td><td class="py-1">:</td><td class="py-1">${escapeHtml(targetSiswa.anakKe || "1")}</td></tr>` : ""}
+                                ${selectedIdentitasFields.alamat ? `<tr><td class="py-1 align-top">8.</td><td class="py-1 align-top">Alamat Peserta Didik</td><td class="py-1 align-top">:</td><td class="py-1">${escapeHtml(targetSiswa.alamat)}</td></tr>` : ""}
+                                ${selectedIdentitasFields.telepon ? `<tr><td class="py-1">9.</td><td class="py-1">Nomor Telepon Rumah / HP</td><td class="py-1">:</td><td class="py-1">${escapeHtml(targetSiswa.telepon || "-")}</td></tr>` : ""}
+                                ${selectedIdentitasFields.sekolahAsal ? `<tr><td class="py-1">10.</td><td class="py-1">Satuan Pendidikan Asal</td><td class="py-1">:</td><td class="py-1">${escapeHtml(targetSiswa.sekolahAsal || "-")}</td></tr>` : ""}
+                                ${
+                                  selectedIdentitasFields.diterimaDi
+                                    ? `<tr><td class="py-1">11.</td><td class="py-1">Diterima di Satuan Pendidikan ini</td><td></td><td></td></tr>
+                                       <tr><td></td><td class="pl-4 py-0.5">a. Di Kelas / Fase / Tingkatan</td><td>:</td><td>${escapeHtml(targetSiswa.diterimaKelas || targetRombel.faseTingkatan)}</td></tr>
+                                       <tr><td></td><td class="pl-4 py-0.5">b. Pada Tanggal</td><td>:</td><td>${escapeHtml(targetSiswa.diterimaTanggal || "14 Juli 2025")}</td></tr>`
+                                    : ""
+                                }
+                                ${
+                                  selectedIdentitasFields.namaOrtu
+                                    ? `<tr><td class="py-1">12.</td><td class="py-1">Nama Orang Tua</td><td></td><td></td></tr>
+                                       <tr><td></td><td class="pl-4 py-0.5">a. Ayah</td><td>:</td><td>${escapeHtml(targetSiswa.namaAyah || "-")}</td></tr>
+                                       <tr><td></td><td class="pl-4 py-0.5">b. Ibu</td><td>:</td><td>${escapeHtml(targetSiswa.namaIbu || "-")}</td></tr>`
+                                    : ""
+                                }
+                                ${selectedIdentitasFields.alamatOrtu ? `<tr><td class="py-1 align-top">13.</td><td class="py-1 align-top">Alamat Orang Tua</td><td class="py-1 align-top">:</td><td class="py-1">${escapeHtml(targetSiswa.alamatOrtu || targetSiswa.alamat)}</td></tr>` : ""}
+                                ${
+                                  selectedIdentitasFields.pekerjaanOrtu
+                                    ? `<tr><td class="py-1">14.</td><td class="py-1">Pekerjaan Orang Tua</td><td></td><td></td></tr>
+                                       <tr><td></td><td class="pl-4 py-0.5">a. Ayah</td><td>:</td><td>${escapeHtml(targetSiswa.pekerjaanAyah || "-")}</td></tr>
+                                       <tr><td></td><td class="pl-4 py-0.5">b. Ibu</td><td>:</td><td>${escapeHtml(targetSiswa.pekerjaanIbu || "-")}</td></tr>`
+                                    : ""
+                                }
+                                ${selectedIdentitasFields.namaWali ? `<tr><td class="py-1">15.</td><td class="py-1">Nama Wali Peserta Didik</td><td class="py-1">:</td><td class="py-1">${escapeHtml(targetSiswa.namaWali || "-")}</td></tr>` : ""}
+                                ${selectedIdentitasFields.pekerjaanWali ? `<tr><td class="py-1">16.</td><td class="py-1">Pekerjaan Wali Peserta Didik</td><td class="py-1">:</td><td class="py-1">${escapeHtml(targetSiswa.pekerjaanWali || "-")}</td></tr>` : ""}
+                              </tbody>
+                            </table>
+
+                            <div class="flex justify-center items-end mt-12 text-[11pt]">
+                              <div class="w-[3cm] h-[4cm] border border-black flex items-center justify-center text-xs text-center shrink-0">Pas Foto<br />3 x 4</div>
+                              <div style="width:3cm;flex-shrink:0;"></div>
+                              <div class="text-left">
+                                <p>${escapeHtml(p.tanggalRapor)}</p>
+                                <p>Kepala ${escapeHtml(p.namaSatuan)},</p>
+                                <div class="h-16"></div>
+                                <p class="font-bold underline">${escapeHtml(p.namaKepala)}</p>
+                                <p class="text-xs">NIP/NUPTK. ${escapeHtml(p.nipKepala || "-")}</p>
+                              </div>
+                            </div>
+                          </div>
+                        `
+                        : ""
+                    }
+
+                    ${
+                      printNilaiRapor
+                        ? `
+                          <div class="flex flex-col justify-between min-h-[275mm] space-y-3">
+                            <div class="space-y-3">
+                              <table class="w-full table-fixed text-[9.5pt] leading-[1.25] pb-2 border-b border-black">
+                                <tbody>
+                                  <tr>
+                                    <td class="w-[58%] align-top pr-3">
+                                      <table class="w-full table-fixed border-collapse">
+                                        <tbody>
+                                          <tr><td class="w-[105px] whitespace-nowrap py-[1px]">Nama Murid</td><td class="w-[10px] py-[1px]">:</td><td class="font-bold uppercase py-[1px] truncate">${escapeHtml(targetSiswa.nama)}</td></tr>
+                                          <tr><td class="whitespace-nowrap py-[1px]">NIS / NISN</td><td class="py-[1px]">:</td><td class="py-[1px] whitespace-nowrap">${escapeHtml(targetSiswa.nis)} / ${escapeHtml(targetSiswa.nisn || "-")}</td></tr>
+                                          <tr><td class="whitespace-nowrap py-[1px]">Satuan Pendidikan</td><td class="py-[1px]">:</td><td class="font-semibold py-[1px] truncate">${escapeHtml(p.namaSatuan)}</td></tr>
+                                          <tr><td class="whitespace-nowrap py-[1px] align-top">Alamat</td><td class="py-[1px] align-top">:</td><td class="py-[1px] leading-tight">${escapeHtml(p.alamat)}, Kec. ${escapeHtml(p.kecamatan)}, ${escapeHtml(p.kabupaten)}</td></tr>
+                                        </tbody>
+                                      </table>
+                                    </td>
+                                    <td class="w-[42%] align-top pl-2">
+                                      <table class="w-full table-fixed border-collapse">
+                                        <tbody>
+                                          <tr><td class="w-[100px] whitespace-nowrap py-[1px]">Kelas / Program</td><td class="w-[10px] py-[1px]">:</td><td class="py-[1px] whitespace-nowrap">Kelas ${targetRombel.tingkatKelas} (${escapeHtml(targetRombel.program)})</td></tr>
+                                          <tr><td class="whitespace-nowrap py-[1px]">${targetIsMerdeka ? "Fase" : "Tingkatan"}</td><td class="py-[1px]">:</td><td class="py-[1px] whitespace-nowrap">${escapeHtml(targetRombel.faseTingkatan)} ${targetRombel.peminatan !== "-" ? `(${escapeHtml(targetRombel.peminatan)})` : ""}</td></tr>
+                                          <tr><td class="whitespace-nowrap py-[1px]">Semester</td><td class="py-[1px]">:</td><td class="py-[1px] whitespace-nowrap">${escapeHtml(p.semester)}</td></tr>
+                                          <tr><td class="whitespace-nowrap py-[1px]">Tahun Pelajaran</td><td class="py-[1px]">:</td><td class="py-[1px] whitespace-nowrap">${escapeHtml(p.tahunPelajaran)}</td></tr>
+                                        </tbody>
+                                      </table>
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </table>
+
+                              <h2 class="text-center font-bold text-sm uppercase tracking-wide pt-1">LAPORAN HASIL BELAJAR</h2>
+
+                              ${
+                                targetIsMerdeka
+                                  ? `
+                                    <table class="w-full border-collapse border border-black text-[9.5pt]">
+                                      <thead>
+                                        <tr class="bg-gray-100 font-bold text-center">
+                                          <th class="border border-black p-1.5 w-8">No</th>
+                                          <th class="border border-black p-1.5 w-48">Mata Pelajaran</th>
+                                          <th class="border border-black p-1.5 w-16">Nilai Akhir</th>
+                                          <th class="border border-black p-1.5">Capaian Kompetensi</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        ${targetMapels.map((m, idx) => {
+                                          const n = appData.nilaiMap[targetSiswa.id]?.[m.id];
+                                          return `
+                                            <tr>
+                                              <td class="border border-black p-1.5 text-center align-top">${idx + 1}</td>
+                                              <td class="border border-black p-1.5 align-top">${escapeHtml(m.nama)}</td>
+                                              <td class="border border-black p-1.5 text-center align-top">${n?.nilaiAkhirMerdeka ?? "-"}</td>
+                                              <td class="border border-black p-1.5 text-justify leading-snug align-top">${escapeHtml(n?.deskripsiMerdeka || "-")}</td>
+                                            </tr>
+                                          `;
+                                        }).join("")}
+                                      </tbody>
+                                    </table>
+                                  `
+                                  : `
+                                    <div class="space-y-2.5">
+                                      <table class="w-full border-collapse border border-black text-[9pt]">
+                                        <thead><tr class="bg-gray-100 font-bold text-center"><th class="border border-black p-1 w-32">Aspek Sikap</th><th class="border border-black p-1 w-24">Predikat</th><th class="border border-black p-1">Deskripsi</th></tr></thead>
+                                        <tbody>
+                                          <tr><td class="border border-black p-1.5 font-semibold">1. Sikap Spiritual</td><td class="border border-black p-1.5 text-center font-bold">${escapeHtml(targetSiswa.sikapSpiritual.predikat)}</td><td class="border border-black p-1.5">${escapeHtml(targetSiswa.sikapSpiritual.deskripsi)}</td></tr>
+                                          <tr><td class="border border-black p-1.5 font-semibold">2. Sikap Sosial</td><td class="border border-black p-1.5 text-center font-bold">${escapeHtml(targetSiswa.sikapSosial.predikat)}</td><td class="border border-black p-1.5">${escapeHtml(targetSiswa.sikapSosial.deskripsi)}</td></tr>
+                                        </tbody>
+                                      </table>
+                                      <table class="w-full border-collapse border border-black text-[8.5pt]">
+                                        <thead>
+                                          <tr class="bg-gray-100 font-bold text-center">
+                                            <th rowspan="2" class="border border-black p-1 w-7">No</th>
+                                            <th rowspan="2" class="border border-black p-1 w-36">Mata Pelajaran</th>
+                                            <th rowspan="2" class="border border-black p-1 w-9">KKM</th>
+                                            <th colspan="3" class="border border-black p-1">Pengetahuan (KI-3)</th>
+                                            <th colspan="3" class="border border-black p-1">Keterampilan (KI-4)</th>
+                                          </tr>
+                                          <tr class="bg-gray-100 font-bold text-center">
+                                            <th class="border border-black p-1 w-9">Nilai</th><th class="border border-black p-1 w-8">Pred</th><th class="border border-black p-1">Deskripsi</th>
+                                            <th class="border border-black p-1 w-9">Nilai</th><th class="border border-black p-1 w-8">Pred</th><th class="border border-black p-1">Deskripsi</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          ${targetMapels.map((m, idx) => {
+                                            const n = appData.nilaiMap[targetSiswa.id]?.[m.id];
+                                            return `
+                                              <tr>
+                                                <td class="border border-black p-1 text-center align-top">${idx + 1}</td>
+                                                <td class="border border-black p-1 align-top">${escapeHtml(m.nama)}</td>
+                                                <td class="border border-black p-1 text-center align-top">${m.kkm}</td>
+                                                <td class="border border-black p-1 text-center font-bold align-top">${n?.nilaiPengetahuan ?? "-"}</td>
+                                                <td class="border border-black p-1 text-center align-top">${n?.predikatPengetahuan ?? "-"}</td>
+                                                <td class="border border-black p-1 text-justify align-top">${escapeHtml(n?.deskripsiPengetahuan ?? "-")}</td>
+                                                <td class="border border-black p-1 text-center font-bold align-top">${n?.nilaiKeterampilan ?? "-"}</td>
+                                                <td class="border border-black p-1 text-center align-top">${n?.predikatKeterampilan ?? "-"}</td>
+                                                <td class="border border-black p-1 text-justify align-top">${escapeHtml(n?.deskripsiKeterampilan ?? "-")}</td>
+                                              </tr>
+                                            `;
+                                          }).join("")}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  `
+                              }
+
+                              ${
+                                targetIsMerdeka
+                                  ? `
+                                    <div class="pt-1">
+                                      <p class="font-bold text-[9.5pt] mb-1">Kokurikuler</p>
+                                      <div class="border border-black p-2.5 text-[9pt] leading-snug">
+                                        <p>Pada semester ini, ananda menunjukkan capaian yang baik dalam penguatan profil lulusan, yang ditunjukkan melalui kegiatan kokurikuler <strong>${escapeHtml(targetSiswa.p5.judul)}</strong> (Tema: ${escapeHtml(targetSiswa.p5.tema)}).</p>
+                                        <p class="mt-1">Pada dimensi <strong>${escapeHtml(targetSiswa.p5.elemen || "kemandirian")}</strong>, ${escapeHtml(targetSiswa.p5.catatanProses)}</p>
+                                      </div>
+                                    </div>
+                                  `
+                                  : ""
+                              }
+
+                              <table class="w-full border-collapse border border-black text-[9pt]">
+                                <thead><tr class="bg-gray-100 font-bold text-center"><th class="border border-black p-1 w-8">No</th><th class="border border-black p-1 w-48">Ekstrakurikuler</th><th class="border border-black p-1">Keterangan</th></tr></thead>
+                                <tbody>
+                                  ${
+                                    targetSiswa.ekskul && targetSiswa.ekskul.length > 0
+                                      ? targetSiswa.ekskul.map((ek, i) => `<tr><td class="border border-black p-1 text-center">${i + 1}</td><td class="border border-black p-1">${escapeHtml(ek.kegiatan)}</td><td class="border border-black p-1">${escapeHtml(ek.keterangan)}</td></tr>`).join("")
+                                      : `<tr><td colspan="3" class="border border-black p-1.5 text-center">-</td></tr>`
+                                  }
+                                </tbody>
+                              </table>
+
+                              <table class="w-full border-collapse border border-black text-[9pt]">
+                                <thead><tr class="bg-gray-100 font-bold"><th colspan="2" class="border border-black p-1 w-[38%] text-left">Ketidakhadiran</th><th class="border border-black p-1 text-left">Catatan Wali Kelas</th></tr></thead>
+                                <tbody>
+                                  <tr><td class="border border-black p-1 w-32">Sakit</td><td class="border border-black p-1 w-24">: ${targetSiswa.sakit} hari</td><td rowspan="3" class="border border-black p-2 align-top text-justify">${escapeHtml(targetSiswa.catatanWali)}</td></tr>
+                                  <tr><td class="border border-black p-1">Izin</td><td class="border border-black p-1">: ${targetSiswa.izin} hari</td></tr>
+                                  <tr><td class="border border-black p-1">Tanpa Keterangan</td><td class="border border-black p-1">: ${targetSiswa.alpa} hari</td></tr>
+                                </tbody>
+                              </table>
+
+                              <div class="border border-black px-2.5 py-1.5 text-[9.5pt]"><strong>Keterangan Kenaikan Tingkatan / Kelulusan :</strong> ${escapeHtml(targetSiswa.keputusan)}</div>
+                              <div class="space-y-1"><p class="font-bold text-[9pt]">Tanggapan Orang Tua/Wali Murid</p><div class="border border-black h-12 w-full"></div></div>
+                              ${renderTandaTanganHtml(targetWali)}
+                            </div>
+                            <div class="border-t border-black pt-1 flex justify-between items-center text-[8pt] text-gray-800 mt-4">
+                              <span>${escapeHtml(targetRombel.namaRombel)} &nbsp; ${escapeHtml(targetSiswa.nama.toUpperCase())} | ${escapeHtml(targetSiswa.nis)}</span>
+                              <span>Halaman : 1</span>
+                            </div>
+                          </div>
+
+                          ${
+                            targetIsMerdeka
+                              ? `
+                                <div class="page-break-before mt-8 pt-6 border-t-2 border-dashed border-slate-300 print:border-none print:mt-0 print:pt-0 flex flex-col justify-between min-h-[275mm]">
+                                  <div class="space-y-4">
+                                    <h2 class="text-center font-bold text-sm uppercase">LAMPIRAN CAPAIAN PROJEK PENGUATAN PROFIL PELAJAR PANCASILA (P5)<br />${escapeHtml(p.namaSatuan)}</h2>
+                                    <div class="border border-black p-3.5 text-[9.5pt] space-y-2">
+                                      <p class="font-bold">Projek 1 : ${escapeHtml(targetSiswa.p5.judul)} (Tema: ${escapeHtml(targetSiswa.p5.tema)})</p>
+                                      <p class="text-justify">${escapeHtml(targetSiswa.p5.deskripsi)}</p>
+                                      <table class="w-full border-collapse border border-black text-xs mt-2">
+                                        <thead><tr class="bg-gray-100 font-bold"><th class="border border-black p-1.5 text-left">Dimensi P5</th><th class="border border-black p-1.5 w-36 text-center">Predikat Capaian</th></tr></thead>
+                                        <tbody>
+                                          ${Object.entries(targetSiswa.p5.dimensi || {}).map(([dim, pred]) => `<tr><td class="border border-black p-1.5">${escapeHtml(dim)}</td><td class="border border-black p-1.5 text-center font-bold">${escapeHtml(pred)}</td></tr>`).join("")}
+                                        </tbody>
+                                      </table>
+                                      <div class="pt-2"><p class="font-bold">Catatan Proses:</p><p class="italic">${escapeHtml(targetSiswa.p5.catatanProses)}</p></div>
+                                    </div>
+                                  </div>
+                                  <div class="border-t border-black pt-1 flex justify-between items-center text-[8pt] text-gray-800">
+                                    <span>${escapeHtml(targetRombel.namaRombel)} &nbsp; ${escapeHtml(targetSiswa.nama.toUpperCase())} | ${escapeHtml(targetSiswa.nis)}</span>
+                                    <span>Halaman : 2</span>
+                                  </div>
+                                </div>
+                              `
+                              : ""
+                          }
+                        `
+                        : ""
+                    }
+                  </div>
+                `;
+              })
+              .join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 11. EVENT HANDLERS DATA MASTER, PENILAIAN, & BACKUP
+    // =========================================================================
+
+    function navigateTab(tab, subTab) {
+      activeTab = tab;
+      if (subTab) masterSubTab = subTab;
+      renderApp();
+    }
+
+    function handleLogoUpload(e) {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        appData.profil.logoPkbmBase64 = reader.result;
+        saveAppState();
+        renderApp();
+        showToast("Logo satuan pendidikan berhasil diunggah!");
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function saveProfilLembaga() {
+      appData.profil.namaSatuan = document.getElementById("prof-nama").value;
+      appData.profil.npsn = document.getElementById("prof-npsn").value;
+      appData.profil.alamat = document.getElementById("prof-alamat").value;
+      appData.profil.kecamatan = document.getElementById("prof-kec").value;
+      appData.profil.namaKepala = document.getElementById("prof-kepala").value;
+      appData.profil.nipKepala = document.getElementById("prof-nip").value;
+      appData.profil.tahunPelajaran = document.getElementById("prof-tp").value;
+      appData.profil.semester = document.getElementById("prof-sem").value;
+      appData.profil.tanggalRapor = document.getElementById("prof-tgl").value;
+      saveAppState();
+      renderApp();
+      showToast("Profil Lembaga & Pengaturan Rapor berhasil disimpan!");
+    }
+
+    function handleAddRombel(e) {
+      e.preventDefault();
+      const nama = document.getElementById("rb-nama").value.trim();
+      const program = document.getElementById("rb-prog").value;
+      const kurikulum = document.getElementById("rb-kur").value;
+      const tingkatKelas = Number(document.getElementById("rb-kls").value);
+      const faseTingkatan = document.getElementById("rb-fase").value.trim();
+      const waliKelasId = document.getElementById("rb-wali").value;
+      if (!nama) return;
+      appData.rombels.push({
+        id: `r_${Date.now()}`,
+        namaRombel: nama,
+        program,
+        kurikulum,
+        tingkatKelas,
+        faseTingkatan,
+        peminatan: "-",
+        waliKelasId,
+      });
+      const tKey = `${program}::${faseTingkatan}`;
+      if (!appData.tingkatanMapelMapping[tKey]) {
+        appData.tingkatanMapelMapping[tKey] = appData.mapels.filter((m) => m.isActive !== false).map((m) => m.id);
+      }
+      saveAppState();
+      renderApp();
+      showToast("Rombel baru berhasil ditambahkan!");
+    }
+
+    function changeRombelKurikulum(id, val) {
+      const rb = appData.rombels.find((r) => r.id === id);
+      if (rb) {
+        rb.kurikulum = val;
+        saveAppState();
+        renderApp();
+        showToast(`Kurikulum ${rb.namaRombel} diubah ke ${val}`);
+      }
+    }
+
+    function deleteRombel(id) {
+      if (appData.rombels.length <= 1) {
+        showToast("Minimal harus menyisakan 1 Rombel aktif.");
+        return;
+      }
+      const rb = appData.rombels.find((r) => r.id === id);
+      appData.rombels = appData.rombels.filter((r) => r.id !== id);
+      saveAppState();
+      renderApp();
+      showToast(`Rombel "${rb?.namaRombel}" berhasil dihapus.`);
+    }
+
+    function handleAddMapel(e) {
+      e.preventDefault();
+      const nama = document.getElementById("mp-nama").value.trim();
+      const kelompok = document.getElementById("mp-kel").value;
+      const skk = Number(document.getElementById("mp-skk").value);
+      const kkm = Number(document.getElementById("mp-kkm").value);
+      if (!nama) return;
+      const newId = `m_${Date.now()}`;
+      appData.mapels.push({
+        id: newId,
+        kode: nama.slice(0, 4).toUpperCase(),
+        nama,
+        kelompok,
+        skk,
+        kkm,
+        tutorId: appData.users[1]?.id || "t1",
+        isActive: true,
+        tps: [
+          { id: `tp_${Date.now()}_1`, kode: "TP.1", deskripsi: `Memahami konsep esensial dan ruang lingkup ${nama}`, isActive: true },
+          { id: `tp_${Date.now()}_2`, kode: "TP.2", deskripsi: `Menerapkan keterampilan praktis ${nama} dalam kehidupan sehari-hari`, isActive: true },
+        ],
+        kds: [
+          { id: `kd_${Date.now()}_1`, aspek: "PENGETAHUAN", kode: "3.1", deskripsi: `Menganalisis konsep dasar pada mata pelajaran ${nama}` },
+          { id: `kd_${Date.now()}_2`, aspek: "KETERAMPILAN", kode: "4.1", deskripsi: `Mempraktikkan hasil belajar mata pelajaran ${nama}` },
+        ],
+      });
+      Object.keys(appData.tingkatanMapelMapping).forEach((k) => {
+        appData.tingkatanMapelMapping[k].push(newId);
+      });
+      saveAppState();
+      renderApp();
+      showToast("Mata pelajaran berhasil ditambahkan!");
+    }
+
+    function updateMapelKkm(id, val) {
+      const m = appData.mapels.find((item) => item.id === id);
+      if (m) {
+        m.kkm = Number(val);
+        saveAppState();
+      }
+    }
+
+    function toggleMapelStatus(id, status) {
+      const m = appData.mapels.find((item) => item.id === id);
+      if (m) {
+        m.isActive = status;
+        saveAppState();
+        renderApp();
+        showToast(`Status mata pelajaran diubah menjadi ${status ? "AKTIF" : "TIDAK AKTIF"}.`);
+      }
+    }
+
+    function deleteMapel(id) {
+      const m = appData.mapels.find((item) => item.id === id);
+      appData.mapels = appData.mapels.filter((item) => item.id !== id);
+      Object.keys(appData.tingkatanMapelMapping).forEach((k) => {
+        appData.tingkatanMapelMapping[k] = appData.tingkatanMapelMapping[k].filter((mid) => mid !== id);
+      });
+      saveAppState();
+      renderApp();
+      showToast(`Mata pelajaran "${m?.nama}" berhasil dihapus.`);
+    }
+
+    function selectAllMapelForTingkatan(tKey) {
+      appData.tingkatanMapelMapping[tKey] = appData.mapels.filter((m) => m.isActive !== false).map((m) => m.id);
+      saveAppState();
+      renderApp();
+      showToast("Semua mata pelajaran aktif dipetakan.");
+    }
+
+    function toggleMapelInTingkatan(tKey, mapelId) {
+      const list = appData.tingkatanMapelMapping[tKey] || [];
+      if (list.includes(mapelId)) {
+        appData.tingkatanMapelMapping[tKey] = list.filter((id) => id !== mapelId);
+      } else {
+        appData.tingkatanMapelMapping[tKey] = [...list, mapelId];
+      }
+      saveAppState();
+      renderApp();
+    }
+
+    function moveMapelOrder(tKey, mapelId, dir) {
+      const list = [...(appData.tingkatanMapelMapping[tKey] || [])];
+      const idx = list.indexOf(mapelId);
+      if (idx === -1) return;
+      const target = dir === "UP" ? idx - 1 : idx + 1;
+      if (target < 0 || target >= list.length) return;
+      [list[idx], list[target]] = [list[target], list[idx]];
+      appData.tingkatanMapelMapping[tKey] = list;
+      saveAppState();
+      renderApp();
+    }
+
+    function handleAddSiswa(e) {
+      e.preventDefault();
+      const nama = document.getElementById("sw-nama").value.trim();
+      const nis = document.getElementById("sw-nis").value.trim();
+      if (!nama || !nis) return;
+      appData.siswas.push({
+        id: `s_${Date.now()}`,
+        nis,
+        nisn: document.getElementById("sw-nisn").value.trim(),
+        password: "123456",
+        nama,
+        jk: document.getElementById("sw-jk").value,
+        ttl: document.getElementById("sw-ttl").value,
+        agama: document.getElementById("sw-agama").value,
+        statusKeluarga: document.getElementById("sw-status").value,
+        anakKe: document.getElementById("sw-anakke").value,
+        alamat: document.getElementById("sw-alamat").value,
+        telepon: document.getElementById("sw-telp").value || "-",
+        sekolahAsal: document.getElementById("sw-asal").value || "-",
+        diterimaKelas: document.getElementById("sw-ditkls").value,
+        diterimaTanggal: document.getElementById("sw-dittgl").value,
+        namaAyah: document.getElementById("sw-ayah").value || "-",
+        namaIbu: document.getElementById("sw-ibu").value || "-",
+        alamatOrtu: document.getElementById("sw-alamatortu").value,
+        pekerjaanAyah: document.getElementById("sw-pkayah").value || "-",
+        pekerjaanIbu: document.getElementById("sw-pkibu").value || "-",
+        namaWali: document.getElementById("sw-wali").value || "-",
+        pekerjaanWali: document.getElementById("sw-pkwali").value || "-",
+        rombelId: document.getElementById("sw-rombel").value,
+        isActive: true,
+        sakit: 0,
+        izin: 0,
+        alpa: 0,
+        catatanWali: "Terus semangat belajar dan tingkatkan prestasi.",
+        keputusan: "Naik ke Tingkatan Berikutnya",
+        ekskul: [{ kegiatan: "Pramuka", predikat: "Baik", keterangan: "Aktif mengikuti kegiatan." }],
+        sikapSpiritual: { predikat: "Baik", deskripsi: "Taat beribadah dan berdoa sebelum belajar." },
+        sikapSosial: { predikat: "Baik", deskripsi: "Santun dan disiplin." },
+        p5: {
+          tema: "Kewirausahaan",
+          elemen: "Kemandirian dan kreativitas",
+          judul: "Projek Kemandirian Ekonomi Lokal",
+          deskripsi: "Pengembangan keterampilan kewirausahaan warga belajar.",
+          dimensi: { Mandiri: "BSH", Kreatif: "BSH" },
+          catatanProses: "Menunjukkan perkembangan positif selama kegiatan projek.",
+        },
+      });
+      saveAppState();
+      renderApp();
+      showToast("Warga Belajar beserta 16 data identitas lengkap berhasil ditambahkan!");
+    }
+
+    function toggleSiswaStatus(id, status) {
+      const s = appData.siswas.find((item) => item.id === id);
+      if (s) {
+        s.isActive = status;
+        saveAppState();
+        renderApp();
+        showToast(`Warga Belajar "${s.nama}" ${status ? "diaktifkan" : "dinonaktifkan"}.`);
+      }
+    }
+
+    function downloadTemplateCsvSiswa() {
+      const header = "Nama Lengkap;NIS;NISN;Tempat Tanggal Lahir;Jenis Kelamin;Agama;Status Keluarga;Anak Ke;Alamat Peserta Didik;Telepon;Sekolah Asal;Diterima Kelas;Tanggal Diterima;Nama Ayah;Nama Ibu;Alamat Orang Tua;Pekerjaan Ayah;Pekerjaan Ibu;Nama Wali;Pekerjaan Wali\n";
+      const sample = "Budi Santoso;20261011;0091234567;Tuban, 12 Maret 2008;Laki-laki;Islam;Anak Kandung;1;Ds. Plumpang, Tuban;085711223344;SMPN 1 Plumpang;Fase E (Kelas 10);14 Juli 2025;Bpk. Joko;Ibu Siti;Ds. Plumpang, Tuban;Petani;Ibu Rumah Tangga;-;-\n";
+      const blob = new Blob([header + sample], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "Template_Import_Siswa_PKBM_ARM.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function processKolektifSiswa() {
+      const raw = document.getElementById("kol-paste-siswa").value.trim();
+      const rombelId = document.getElementById("kol-rombel").value;
+      if (!raw) return;
+      const lines = raw.split(/\r?\n/).filter((l) => l.trim());
+      let added = 0;
+      lines.forEach((line, idx) => {
+        const cols = line.includes("\t") ? line.split("\t") : line.split(";");
+        const nama = (cols[0] || "").trim();
+        const nis = (cols[1] || "").trim();
+        if (!nama || !nis || nama.toLowerCase().includes("nama lengkap")) return;
+        appData.siswas.push({
+          id: `s_kol_${Date.now()}_${idx}`,
+          nama,
+          nis,
+          nisn: (cols[2] || "-").trim(),
+          password: "123456",
+          ttl: (cols[3] || "Tuban, 01 Januari 2008").trim(),
+          jk: (cols[4] || "Laki-laki").trim(),
+          agama: (cols[5] || "Islam").trim(),
+          statusKeluarga: (cols[6] || "Anak Kandung").trim(),
+          anakKe: (cols[7] || "1").trim(),
+          alamat: (cols[8] || "Kec. Plumpang, Tuban").trim(),
+          telepon: (cols[9] || "-").trim(),
+          sekolahAsal: (cols[10] || "-").trim(),
+          diterimaKelas: (cols[11] || "Fase E").trim(),
+          diterimaTanggal: (cols[12] || "14 Juli 2025").trim(),
+          namaAyah: (cols[13] || "-").trim(),
+          namaIbu: (cols[14] || "-").trim(),
+          alamatOrtu: (cols[15] || cols[8] || "Kec. Plumpang, Tuban").trim(),
+          pekerjaanAyah: (cols[16] || "-").trim(),
+          pekerjaanIbu: (cols[17] || "-").trim(),
+          namaWali: (cols[18] || "-").trim(),
+          pekerjaanWali: (cols[19] || "-").trim(),
+          rombelId,
+          isActive: true,
+          sakit: 0,
+          izin: 0,
+          alpa: 0,
+          catatanWali: "Terus semangat belajar dan tingkatkan prestasi.",
+          keputusan: "Naik ke Tingkatan Berikutnya",
+          ekskul: [{ kegiatan: "Pramuka", predikat: "Baik", keterangan: "Aktif mengikuti kegiatan." }],
+          sikapSpiritual: { predikat: "Baik", deskripsi: "Taat beribadah dan berdoa sebelum belajar." },
+          sikapSosial: { predikat: "Baik", deskripsi: "Santun dan disiplin." },
+          p5: { tema: "Kewirausahaan", elemen: "Kemandirian", judul: "Projek Kemandirian Lokal", deskripsi: "Pengembangan keterampilan.", dimensi: { Mandiri: "BSH" }, catatanProses: "Aktif mengikuti kegiatan." },
+        });
+        added++;
+      });
+      saveAppState();
+      renderApp();
+      showToast(`Berhasil menambahkan ${added} Warga Belajar secara kolektif!`);
+    }
+
+    function processKolektifGuru() {
+      const raw = document.getElementById("kol-paste-guru").value.trim();
+      if (!raw) return;
+      const lines = raw.split(/\r?\n/).filter((l) => l.trim());
+      let added = 0;
+      lines.forEach((line, idx) => {
+        const cols = line.includes("\t") ? line.split("\t") : line.split(";");
+        const nama = (cols[0] || "").trim();
+        const username = (cols[1] || "").trim();
+        if (!nama || !username) return;
+        appData.users.push({
+          id: `u_kol_${Date.now()}_${idx}`,
+          nama,
+          username,
+          password: "123456",
+          nuptk: (cols[2] || "-").trim(),
+          role: (cols[3] || "TUTOR").trim().toUpperCase() === "WALI_KELAS" ? "WALI_KELAS" : "TUTOR",
+        });
+        added++;
+      });
+      saveAppState();
+      renderApp();
+      showToast(`Berhasil menambahkan ${added} Akun Tutor / Pamong secara kolektif!`);
+    }
+
+    function handleAddUser(e) {
+      e.preventDefault();
+      appData.users.push({
+        id: `u_${Date.now()}`,
+        nama: document.getElementById("usr-nama").value.trim(),
+        username: document.getElementById("usr-user").value.trim(),
+        password: document.getElementById("usr-pass").value.trim(),
+        role: document.getElementById("usr-role").value,
+        nuptk: "-",
+      });
+      saveAppState();
+      renderApp();
+      showToast("Akun Tutor / Wali Kelas baru berhasil dibuat!");
+    }
+
+    function updateUsernameAdmin(id, val) {
+      const u = appData.users.find((item) => item.id === id);
+      if (u && val.trim()) {
+        u.username = val.trim();
+        saveAppState();
+        showToast(`Username ${u.nama} diperbarui.`);
+      }
+    }
+
+    function updateUserPasswordAdmin(id) {
+      const inp = document.getElementById(`newpass-${id}`);
+      const u = appData.users.find((item) => item.id === id);
+      if (u && inp && inp.value.trim()) {
+        u.password = inp.value.trim();
+        saveAppState();
+        renderApp();
+        showToast(`Password akun ${u.username} berhasil diubah!`);
+      }
+    }
+
+    function savePrintConfig() {
+      appData.printConfig.paperSize = document.getElementById("pc-paper").value;
+      appData.printConfig.scalePercent = Number(document.getElementById("pc-scale").value);
+      appData.printConfig.signatureLayout = document.getElementById("pc-sig").value;
+      appData.printConfig.marginTop = Number(document.getElementById("pc-mt").value);
+      appData.printConfig.marginBottom = Number(document.getElementById("pc-mb").value);
+      appData.printConfig.marginLeft = Number(document.getElementById("pc-ml").value);
+      appData.printConfig.marginRight = Number(document.getElementById("pc-mr").value);
+      updateDynamicPrintStyle();
+      saveAppState();
+      renderApp();
+      showToast("Konfigurasi Cetak PDF berhasil disimpan!");
+    }
+
+    function downloadBackupJson() {
+      const payload = { app: "e-Rapor Pendidikan Kesetaraan", exportedAt: new Date().toISOString(), data: appData };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Backup_eRapor_PKBM_ARM_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("File Backup Database e-Rapor berhasil diunduh!");
+    }
+
+    function handleRestoreJson(e) {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const parsed = JSON.parse(String(ev.target?.result || "{}"));
+          const d = parsed.data || parsed;
+          if (!d.profil || !Array.isArray(d.siswas) || !Array.isArray(d.rombels)) {
+            showToast("Format file backup tidak valid!");
+            return;
+          }
+          appData = d;
+          updateDynamicPrintStyle();
+          saveAppState();
+          renderApp();
+          showToast(`Restore berhasil! (${d.siswas.length} Warga Belajar dipulihkan)`);
+        } catch (err) {
+          showToast("Gagal membaca file backup JSON.");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // Event handlers Penilaian, P5 & Wali
+    function handleGenerateTpOrKd() {
+      const rb = appData.rombels.find((r) => r.id === penilaianRombelId) || appData.rombels[0];
+      const mp = appData.mapels.find((m) => m.id === penilaianMapelId) || appData.mapels[0];
+      if (rb.kurikulum === "MERDEKA") {
+        mp.tps = generateTPOtomatis(mp.nama, rb.tingkatKelas, appData.profil.semester);
+        showToast(`Berhasil generate ${mp.tps.length} Tujuan Pembelajaran (TP)!`);
+      } else {
+        mp.kds = generateKDOtomatis(mp.nama, rb.tingkatKelas, appData.profil.semester);
+        showToast("Berhasil generate Kompetensi Dasar (KD) KI-3 & KI-4!");
+      }
+      saveAppState();
+      renderApp();
+    }
+
+    function handleAddManualTp(e) {
+      e.preventDefault();
+      const mp = appData.mapels.find((m) => m.id === penilaianMapelId);
+      const code = document.getElementById("new-tp-code").value.trim() || `TP.${mp.tps.length + 1}`;
+      const desc = document.getElementById("new-tp-desc").value.trim();
+      if (!desc) return;
+      mp.tps.push({ id: `tp_${Date.now()}`, kode: code, deskripsi: desc, isActive: true });
+      saveAppState();
+      renderApp();
+      showToast("Tujuan Pembelajaran baru ditambahkan!");
+    }
+
+    function toggleTpStatus(mapelId, tpId, status) {
+      const mp = appData.mapels.find((m) => m.id === mapelId);
+      const tp = mp?.tps.find((t) => t.id === tpId);
+      if (tp) {
+        tp.isActive = status;
+        saveAppState();
+        renderApp();
+      }
+    }
+
+    function deleteTp(mapelId, tpId) {
+      const mp = appData.mapels.find((m) => m.id === mapelId);
+      if (mp) {
+        mp.tps = mp.tps.filter((t) => t.id !== tpId);
+        saveAppState();
+        renderApp();
+      }
+    }
+
+    function handleGenerateNilaiOtomatisAll() {
+      const rb = appData.rombels.find((r) => r.id === penilaianRombelId) || appData.rombels[0];
+      const mp = appData.mapels.find((m) => m.id === penilaianMapelId) || appData.mapels[0];
+      const activeTps = mp.tps.filter((t) => t.isActive !== false);
+      const members = appData.siswas.filter((s) => s.rombelId === rb.id && s.isActive !== false);
+
+      members.forEach((s, idx) => {
+        if (!appData.nilaiMap[s.id]) appData.nilaiMap[s.id] = {};
+        const cur = appData.nilaiMap[s.id][mp.id] || {};
+        const base = Math.min(96, Math.max(mp.kkm + 3, 78 + ((idx * 4 + s.nama.length) % 16)));
+        const second = Math.max(mp.kkm, base - 6);
+
+        if (rb.kurikulum === "MERDEKA") {
+          const tpScores = { ...(cur.tpScores || {}) };
+          const tpList = activeTps.map((tp, tIdx) => {
+            const sc = tIdx % 2 === 0 ? base : second;
+            tpScores[tp.id] = sc;
+            return { deskripsi: tp.deskripsi, skor: sc };
+          });
+          const avg = Math.round(tpList.reduce((a, b) => a + b.skor, 0) / (tpList.length || 1));
+          appData.nilaiMap[s.id][mp.id] = { ...cur, tpScores, nilaiAkhirMerdeka: avg, deskripsiMerdeka: generateDeskripsiMerdeka(tpList) };
+        } else {
+          const nP = base;
+          const nK = Math.min(98, base + 2);
+          const kdP = mp.kds.filter((k) => k.aspek === "PENGETAHUAN").map((k, ki) => ({ deskripsi: k.deskripsi, skor: ki === 0 ? nP : second }));
+          const kdK = mp.kds.filter((k) => k.aspek === "KETERAMPILAN").map((k) => ({ deskripsi: k.deskripsi, skor: nK }));
+          appData.nilaiMap[s.id][mp.id] = {
+            ...cur,
+            nilaiPengetahuan: nP,
+            predikatPengetahuan: hitungPredikatK13(nP, mp.kkm),
+            deskripsiPengetahuan: generateDeskripsiK13(kdP, mp.kkm),
+            nilaiKeterampilan: nK,
+            predikatKeterampilan: hitungPredikatK13(nK, mp.kkm),
+            deskripsiKeterampilan: generateDeskripsiK13(kdK, mp.kkm),
+          };
+        }
+      });
+      saveAppState();
+      renderApp();
+      showToast(`Nilai & Deskripsi Capaian otomatis berhasil digenerate untuk ${members.length} Warga Belajar!`);
+    }
+
+    function updateTpScore(siswaId, mapelId, tpId, val, shouldRender = false) {
+      const mp = appData.mapels.find((m) => m.id === mapelId);
+      const activeTps = mp.tps.filter((t) => t.isActive !== false);
+      if (!appData.nilaiMap[siswaId]) appData.nilaiMap[siswaId] = {};
+      if (!appData.nilaiMap[siswaId][mapelId]) appData.nilaiMap[siswaId][mapelId] = { tpScores: {} };
+      const rec = appData.nilaiMap[siswaId][mapelId];
+      rec.tpScores[tpId] = Number(val);
+      const list = activeTps.map((t) => ({ deskripsi: t.deskripsi, skor: rec.tpScores[t.id] ?? 80 }));
+      rec.nilaiAkhirMerdeka = Math.round(list.reduce((a, b) => a + b.skor, 0) / (list.length || 1));
+      rec.deskripsiMerdeka = generateDeskripsiMerdeka(list);
+
+      // Update sel Nilai Akhir & Deskripsi secara langsung di DOM tanpa menghilangkan fokus kursor
+      const finalInput = document.getElementById(`merdeka-final-${siswaId}-${mapelId}`);
+      const descInput = document.getElementById(`merdeka-desc-${siswaId}-${mapelId}`);
+      if (finalInput) finalInput.value = rec.nilaiAkhirMerdeka;
+      if (descInput) descInput.value = rec.deskripsiMerdeka;
+
+      saveAppState();
+      if (shouldRender) renderApp();
+    }
+
+    function updateMerdekaFinal(siswaId, mapelId, val) {
+      if (!appData.nilaiMap[siswaId]) appData.nilaiMap[siswaId] = {};
+      if (!appData.nilaiMap[siswaId][mapelId]) appData.nilaiMap[siswaId][mapelId] = {};
+      appData.nilaiMap[siswaId][mapelId].nilaiAkhirMerdeka = Number(val);
+      saveAppState();
+    }
+
+    function updateMerdekaDesc(siswaId, mapelId, val) {
+      if (!appData.nilaiMap[siswaId]) appData.nilaiMap[siswaId] = {};
+      if (!appData.nilaiMap[siswaId][mapelId]) appData.nilaiMap[siswaId][mapelId] = {};
+      appData.nilaiMap[siswaId][mapelId].deskripsiMerdeka = val;
+      saveAppState();
+    }
+
+    function updateK13Score(siswaId, mapelId, aspek, val, shouldRender = false) {
+      const mp = appData.mapels.find((m) => m.id === mapelId);
+      if (!appData.nilaiMap[siswaId]) appData.nilaiMap[siswaId] = {};
+      if (!appData.nilaiMap[siswaId][mapelId]) appData.nilaiMap[siswaId][mapelId] = {};
+      const rec = appData.nilaiMap[siswaId][mapelId];
+      const num = Number(val);
+      if (aspek === "PENGETAHUAN") {
+        rec.nilaiPengetahuan = num;
+        rec.predikatPengetahuan = hitungPredikatK13(num, mp.kkm);
+        const kdP = mp.kds.filter((k) => k.aspek === "PENGETAHUAN").map((k) => ({ deskripsi: k.deskripsi, skor: num }));
+        rec.deskripsiPengetahuan = generateDeskripsiK13(kdP, mp.kkm);
+        const predEl = document.getElementById(`k13-pred-p-${siswaId}-${mapelId}`);
+        const descEl = document.getElementById(`k13-desc-p-${siswaId}-${mapelId}`);
+        if (predEl) predEl.textContent = rec.predikatPengetahuan;
+        if (descEl) descEl.value = rec.deskripsiPengetahuan;
+      } else {
+        rec.nilaiKeterampilan = num;
+        rec.predikatKeterampilan = hitungPredikatK13(num, mp.kkm);
+        const kdK = mp.kds.filter((k) => k.aspek === "KETERAMPILAN").map((k) => ({ deskripsi: k.deskripsi, skor: num }));
+        rec.deskripsiKeterampilan = generateDeskripsiK13(kdK, mp.kkm);
+        const predEl = document.getElementById(`k13-pred-k-${siswaId}-${mapelId}`);
+        const descEl = document.getElementById(`k13-desc-k-${siswaId}-${mapelId}`);
+        if (predEl) predEl.textContent = rec.predikatKeterampilan;
+        if (descEl) descEl.value = rec.deskripsiKeterampilan;
+      }
+      saveAppState();
+      if (shouldRender) renderApp();
+    }
+
+    function updateK13Desc(siswaId, mapelId, aspek, val) {
+      if (!appData.nilaiMap[siswaId]) appData.nilaiMap[siswaId] = {};
+      if (!appData.nilaiMap[siswaId][mapelId]) appData.nilaiMap[siswaId][mapelId] = {};
+      if (aspek === "PENGETAHUAN") appData.nilaiMap[siswaId][mapelId].deskripsiPengetahuan = val;
+      else appData.nilaiMap[siswaId][mapelId].deskripsiKeterampilan = val;
+      saveAppState();
+    }
+
+    function updateSiswaField(siswaId, path, value) {
+      const s = appData.siswas.find((item) => item.id === siswaId);
+      if (!s) return;
+      const parts = path.split(".");
+      if (parts.length === 1) s[parts[0]] = value;
+      else if (parts.length === 2) s[parts[0]][parts[1]] = value;
+      saveAppState();
+    }
+
+    function autoGenerateSikap(siswaId, tingkatKelas) {
+      const s = appData.siswas.find((item) => item.id === siswaId);
+      if (!s) return;
+      s.sikapSpiritual.deskripsi = generateAISikap("SPIRITUAL", s.sikapSpiritual.predikat, tingkatKelas);
+      s.sikapSosial.deskripsi = generateAISikap("SOSIAL", s.sikapSosial.predikat, tingkatKelas);
+      saveAppState();
+      renderApp();
+      showToast(`Deskripsi Sikap AI untuk ${s.nama} berhasil diisi!`);
+    }
+
+    function autoGenerateCatatanWali(siswaId, rombelId) {
+      const s = appData.siswas.find((item) => item.id === siswaId);
+      const rb = appData.rombels.find((r) => r.id === rombelId);
+      if (!s || !rb) return;
+      s.catatanWali = generateAICatatanWali(s, rb);
+      saveAppState();
+      renderApp();
+      showToast(`Catatan Wali Kelas AI untuk ${s.nama} berhasil dibuat!`);
+    }
+
+    // =========================================================================
+    // 12. RENDER UTAMA SHELL APLIKASI
+    // =========================================================================
+
+    function renderApp() {
+      const root = document.getElementById("app");
+      updateDynamicPrintStyle();
+
+      if (!currentUser) {
+        root.innerHTML = renderLoginView();
+        refreshIcons();
+        return;
+      }
+
+      const role = currentUser.role;
+      const p = appData.profil;
+      const navItems = [
+        { id: "dashboard", label: "Dashboard Utama", icon: "layout-dashboard", roles: ["ADMIN", "TUTOR", "WALI_KELAS", "WARGA_BELAJAR"] },
+        { id: "master", label: "Data Master & Pengaturan", icon: "database", roles: ["ADMIN"] },
+        { id: "penilaian", label: "Input Nilai & TP / KD", icon: "pen-tool", roles: ["ADMIN", "TUTOR"] },
+        { id: "p5_sikap", label: "Penilaian P5 & Sikap", icon: "award", roles: ["ADMIN", "TUTOR", "WALI_KELAS"] },
+        { id: "wali_kelas", label: "Modul Wali / Pamong", icon: "user-check", roles: ["ADMIN", "WALI_KELAS"] },
+        { id: "rapor", label: "Cetak & Preview Rapor", icon: "printer", roles: ["ADMIN", "TUTOR", "WALI_KELAS", "WARGA_BELAJAR"] },
+      ].filter((item) => item.roles.includes(role));
+
+      const roleLabel =
+        role === "ADMIN"
+          ? "Administrator / Operator PKBM"
+          : role === "TUTOR"
+          ? "Tutor (Pendidik)"
+          : role === "WALI_KELAS"
+          ? "Wali Kelas / Pamong Belajar"
+          : "Warga Belajar (Peserta Didik)";
+
+      let workspaceHtml = "";
+      if (activeTab === "dashboard") workspaceHtml = renderDashboardModule();
+      else if (activeTab === "master") workspaceHtml = renderMasterDataModule();
+      else if (activeTab === "penilaian") workspaceHtml = renderPenilaianTutorModule();
+      else if (activeTab === "p5_sikap") workspaceHtml = renderPenilaianP5SikapModule();
+      else if (activeTab === "wali_kelas") workspaceHtml = renderWaliKelasModule();
+      else if (activeTab === "rapor") workspaceHtml = renderCetakRaporModule();
+
+      root.innerHTML = `
+        <div class="min-h-screen bg-slate-100 flex flex-col md:flex-row font-sans text-slate-800">
+          <!-- SIDEBAR -->
+          <aside class="no-print w-full md:w-64 bg-[#0F2C59] text-white flex flex-col justify-between shrink-0 shadow-xl">
+            <div>
+              <div class="p-5 border-b border-blue-800/80 flex items-center gap-3">
+                ${
+                  p.logoPkbmBase64
+                    ? `<img src="${p.logoPkbmBase64}" alt="Logo" class="w-10 h-10 rounded-lg object-cover bg-white p-0.5 shrink-0" />`
+                    : `<div class="w-10 h-10 rounded-lg bg-amber-400 text-[#0F2C59] flex items-center justify-center font-bold shrink-0"><i data-lucide="book-open" class="w-6 h-6"></i></div>`
+                }
+                <div class="overflow-hidden">
+                  <p class="text-[10px] uppercase tracking-wider text-amber-300 font-bold">e-Rapor Kesetaraan</p>
+                  <h1 class="text-xs font-extrabold truncate">${escapeHtml(p.namaSatuan)}</h1>
+                </div>
+              </div>
+              <div class="p-3 mx-3 mt-3 bg-blue-950/70 rounded-xl border border-blue-800/70">
+                <span class="text-[10px] uppercase tracking-wider text-blue-300 font-semibold block">Hak Akses Aktif:</span>
+                <p class="text-xs font-extrabold text-amber-300 mt-0.5">${roleLabel}</p>
+              </div>
+              <nav class="p-3 space-y-1 mt-2">
+                ${navItems
+                  .map(
+                    (item) => `
+                  <button onclick="navigateTab('${item.id}')" class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition ${
+                      activeTab === item.id ? "bg-amber-400 text-[#0F2C59] shadow-md" : "text-blue-100 hover:bg-blue-900/60"
+                    }">
+                    <i data-lucide="${item.icon}" class="w-4 h-4 shrink-0"></i>
+                    <span>${item.label}</span>
+                  </button>
+                `
+                  )
+                  .join("")}
+              </nav>
+            </div>
+            <div class="p-3 border-t border-blue-900 bg-[#0A1F40] space-y-2">
+              <div class="px-2 py-1">
+                <p class="text-[11px] font-bold text-white truncate">${escapeHtml(currentUser.nama)}</p>
+                <p class="text-[10px] text-blue-300">Username: ${escapeHtml(currentUser.username)}</p>
+              </div>
+              <div class="grid grid-cols-2 gap-1.5">
+                <button type="button" onclick="openPasswordModal()" class="flex items-center justify-center gap-1 py-2 px-2 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 border border-blue-400/20 transition text-[11px] font-semibold"><i data-lucide="key-round" class="w-3.5 h-3.5"></i> Password</button>
+                <button type="button" onclick="handleLogout()" class="flex items-center justify-center gap-1 py-2 px-2 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-red-200 border border-red-400/20 transition text-[11px] font-semibold"><i data-lucide="log-out" class="w-3.5 h-3.5"></i> Keluar</button>
+              </div>
+            </div>
+          </aside>
+
+          <!-- MAIN WORKSPACE -->
+          <main class="flex-1 flex flex-col min-w-0">
+            <header class="no-print bg-white border-b border-slate-200 px-6 py-3.5 flex flex-wrap justify-between items-center gap-3 sticky top-0 z-10 shadow-sm">
+              <div class="flex items-center gap-2.5 text-xs font-bold text-slate-600">
+                <span>${escapeHtml(p.namaSatuan)} • TP ${escapeHtml(p.tahunPelajaran)}</span>
+                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  ${window.cloudSync?.enabled ? "Live Cloud Sync" : "Live Auto-Sync"}
+                </span>
+              </div>
+              <div class="flex items-center gap-2.5">
+                <div class="text-right hidden sm:block mr-1">
+                  <p class="text-xs font-bold text-slate-800">${escapeHtml(currentUser.nama)}</p>
+                  <p class="text-[11px] text-emerald-600 font-medium">● Sesi Aktif (${role})</p>
+                </div>
+                <button onclick="openPasswordModal()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 flex items-center gap-1.5 transition"><i data-lucide="key-round" class="w-3.5 h-3.5 text-blue-600"></i> Ganti Password</button>
+                <button onclick="handleLogout()" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-700 text-white flex items-center gap-1.5 shadow-sm transition"><i data-lucide="log-out" class="w-3.5 h-3.5"></i> Logout</button>
+              </div>
+            </header>
+            <div class="p-4 md:p-6 flex-1 max-w-7xl w-full mx-auto">
+              ${workspaceHtml}
+            </div>
+          </main>
+        </div>
+      `;
+
+      refreshIcons();
+    }
+
+    window.addEventListener("DOMContentLoaded", function () {
+      renderApp();
+    });
+  </script>
+</body>
+</html>
